@@ -8,6 +8,7 @@ import { gridAuthService } from '../services/grid/grid-auth.service.js';
 import { gridAccountService } from '../services/grid/grid-account.service.js';
 import { privyCryptoService } from '../services/privy-crypto.service.js';
 import { solanaWalletService } from '../services/wallet/solana-wallet.service.js';
+// import privateTransferService from '../services/arcium/private-transfer.service.js';
 import { Session } from '../models/Session.js';
 import { User } from '../models/User.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -338,28 +339,28 @@ router.post('/accounts/verify', asyncHandler(async (req: Request, res: Response)
     user.solanaPrivateWallet = solanaPrivatePublicKey;
     console.log('✅ Private Solana wallet generated:', solanaPrivatePublicKey);
 
-    // Enregistrer dans Arcium MPC
-    console.log('🔐 Registering user in Arcium MPC system...');
-    try {
-      const privateWalletPubkey = new PublicKey(solanaPrivatePublicKey);
-      const serverKeypair = await solanaWalletService.getServerKeypair();
+    // Enregistrer dans Arcium MPC - Disabled for now
+    // console.log('🔐 Registering user in Arcium MPC system...');
+    // try {
+    //   const privateWalletPubkey = new PublicKey(solanaPrivatePublicKey);
+    //   const serverKeypair = await solanaWalletService.getServerKeypair();
 
-      if (serverKeypair) {
-        const arciumResult = await privateTransferService.registerUser(privateWalletPubkey, serverKeypair);
+    //   if (serverKeypair) {
+    //     const arciumResult = await privateTransferService.registerUser(privateWalletPubkey, serverKeypair);
 
-        if (arciumResult.success && arciumResult.userId !== undefined) {
-          user.arciumUserId = arciumResult.userId;
-          console.log('✅ User registered in Arcium with ID:', arciumResult.userId);
-        } else {
-          console.warn('⚠️  Failed to register in Arcium:', arciumResult.error);
-        }
-      } else {
-        console.warn('⚠️  Server keypair not found, skipping Arcium registration');
-      }
-    } catch (arciumError: any) {
-      console.error('❌ Arcium registration error:', arciumError.message);
-      // Continue même si Arcium échoue - on peut enregistrer plus tard
-    }
+    //     if (arciumResult.success && arciumResult.userId !== undefined) {
+    //       user.arciumUserId = arciumResult.userId;
+    //       console.log('✅ User registered in Arcium with ID:', arciumResult.userId);
+    //     } else {
+    //       console.warn('⚠️  Failed to register in Arcium:', arciumResult.error);
+    //     }
+    //   } else {
+    //     console.warn('⚠️  Server keypair not found, skipping Arcium registration');
+    //   }
+    // } catch (arciumError: any) {
+    //   console.error('❌ Arcium registration error:', arciumError.message);
+    //   // Continue même si Arcium échoue - on peut enregistrer plus tard
+    // }
 
     await user.save();
   } else {

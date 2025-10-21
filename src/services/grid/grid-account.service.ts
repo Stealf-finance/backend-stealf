@@ -8,7 +8,7 @@
  * GET /accounts/{address}/balances - Get Balances
  */
 
-import { GridBaseService } from './grid-base.service';
+import { GridBaseService } from './grid-base.service.js';
 import { v4 as uuidv4 } from 'uuid';
 import {
   GridCreateAccountRequest,
@@ -19,7 +19,7 @@ import {
   GridUpdateAccountRequest,
   GridUpdateAccountResponse,
   GridBalanceResponse
-} from './grid-types';
+} from './grid-types.js';
 
 export class GridAccountService extends GridBaseService {
   constructor() {

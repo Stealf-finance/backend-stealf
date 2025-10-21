@@ -3,7 +3,7 @@
  * Handles HPKE keys and decrypted authorization keys for Grid Protocol
  */
 
-import { privyCryptoService } from './privy-crypto.service';
+import { privyCryptoService } from './privy-crypto.service.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -246,10 +246,7 @@ export class KeyManagerService {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      const data = Array.from(this.userKeys.entries()).map(([email, keys]) => ({
-        email,
-        ...keys
-      }));
+      const data = Array.from(this.userKeys.entries()).map(([, keys]) => keys);
 
       fs.writeFileSync(
         this.keysFilePath,

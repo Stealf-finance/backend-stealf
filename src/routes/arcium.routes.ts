@@ -139,11 +139,21 @@ router.post('/transfer', authMiddleware, async (req: Request, res: Response) => 
 
     const amountBigInt = BigInt(amount);
 
+    // Récupérer le keypair du serveur pour payer les frais
+    const serverKeypair = await solanaWalletService.getServerKeypair();
+    if (!serverKeypair) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server keypair not found',
+      });
+    }
+
     const result = await privateTransferService.executePrivateTransfer(
       senderId,
       receiverId,
       amountBigInt,
-      senderKeypair
+      senderKeypair,
+      serverKeypair
     );
 
     if (result.success) {

@@ -1,4 +1,4 @@
-import { ArciumClient } from '@arcium-hq/client';
+// Note: ArciumClient import removed - using Connection directly instead
 import { Connection, PublicKey } from '@solana/web3.js';
 
 /**
@@ -13,21 +13,14 @@ const ARCIUM_CONFIG = {
 
 /**
  * Service de cryptographie Arcium pour transactions confidentielles
- * Utilise le SDK officiel @arcium-hq/client
+ * Utilise la connexion Solana directement
  */
 class ArciumCryptoService {
-  private client: ArciumClient;
   private connection: Connection;
 
   constructor() {
     // Initialiser la connexion Solana devnet
     this.connection = new Connection(ARCIUM_CONFIG.solanaRpcEndpoint, 'confirmed');
-
-    // Initialiser le client Arcium
-    this.client = new ArciumClient({
-      connection: this.connection,
-      programId: ARCIUM_CONFIG.programId,
-    });
 
     console.log('🔐 Arcium Crypto Service initialized');
     console.log('📡 Network:', ARCIUM_CONFIG.network);

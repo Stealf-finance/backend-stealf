@@ -82,24 +82,19 @@ export class PrivyCryptoService {
       const ciphertext = Buffer.from(encryptedData.ciphertext, 'base64');
       const privateKeyDer = Buffer.from(privateKeyB64, 'base64');
 
-      // Import the private key
-      const privateKey = this.importPrivateKey(privateKeyDer);
+      // Import the private key using the CipherSuite
+      const rawKey = this.extractRawPrivateKeyFromPKCS8(privateKeyDer);
+      const cryptoKey = await this.suite.kem.importKey('raw', rawKey.buffer as ArrayBuffer, false);
 
-      // Export the raw private key for HPKE
-      const rawPrivateKey = this.extractRawPrivateKeyFromPKCS8(privateKeyDer);
-
-      // Create recipient context with the raw key
+      // Create recipient context with the CryptoKey
       const recipient = await this.suite.createRecipientContext({
-        recipientKey: {
-          privateKey: rawPrivateKey,
-          publicKey: new Uint8Array() // Will be derived from private key
-        },
-        enc: encapsulatedKey,
-        info: new Uint8Array() // Empty info as per Grid spec
+        recipientKey: cryptoKey,
+        enc: encapsulatedKey.buffer as ArrayBuffer,
+        info: new Uint8Array().buffer as ArrayBuffer
       });
 
       // Decrypt the ciphertext
-      const plaintext = await recipient.open(ciphertext, new Uint8Array()); // Empty AAD
+      const plaintext = await recipient.open(ciphertext.buffer as ArrayBuffer, new Uint8Array().buffer as ArrayBuffer);
       const authKey = new TextDecoder().decode(plaintext);
 
       // Remove "wallet-auth:" prefix if present

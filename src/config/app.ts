@@ -9,8 +9,8 @@ import gridRoutes from '../routes/grid.routes.js';
 import internalRoutes from '../routes/internal.js';
 import walletRoutes from '../routes/wallet.routes.js';
 import transactionRoutes from '../routes/transaction.routes.js';
-import privateTransactionRoutes from '../routes/private-transaction.routes.js';
-import arciumRoutes from '../routes/arcium.routes.js';
+// import privateTransactionRoutes from '../routes/private-transaction.routes.js';
+// import arciumRoutes from '../routes/arcium.routes.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 
 /**
@@ -60,11 +60,11 @@ export function createApp(): Express {
   // Transaction routes
   app.use('/api/v1/transaction', transactionRoutes);
 
-  // Private transaction routes (Arcium MPC)
-  app.use('/api/v1/transaction', privateTransactionRoutes);
+  // Private transaction routes (Arcium MPC) - Disabled for now
+  // app.use('/api/v1/transaction', privateTransactionRoutes);
 
-  // Arcium MPC routes (100% private)
-  app.use('/api/arcium', arciumRoutes);
+  // Arcium MPC routes (100% private) - Disabled for now
+  // app.use('/api/arcium', arciumRoutes);
 
   // Internal routes
   app.use('/internal', internalRoutes);

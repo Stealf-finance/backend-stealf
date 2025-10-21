@@ -5,13 +5,13 @@
  * POST /auth/verify - Verify OTP
  */
 
-import { GridBaseService } from './grid-base.service';
+import { GridBaseService } from './grid-base.service.js';
 import {
   GridInitiateAuthRequest,
   GridInitiateAuthResponse,
   GridAuthVerifyRequest,
   GridAuthVerifyResponse
-} from './grid-types';
+} from './grid-types.js';
 
 export class GridAuthService extends GridBaseService {
   constructor() {
