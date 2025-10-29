@@ -1,0 +1,193 @@
+Deploying MXE program...
+Deploying cluster: https://api.devnet.solana.com
+Upgrade authority: /home/louis/.config/solana/id.json
+Deploying program "private"...
+Program path: /home/louis/Images/Stealf/apps/api/private/target/deploy/private.so...
+Program Id: 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie
+
+Signature: 3Q6dBhgizo9JUXfCk9yznFF3PJZdbh3d9nQDuD1UNU1hLsErV4rJ4QFSW4EC6VgaZqePgEpnX84TYZasrP4B5yY3
+
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+. Retrying...
+Error: Error creating IDL account: RPC response error -32002: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0; 7 log messages:
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie invoke [1]
+  Program log: Instruction: IdlCreateAccount
+  Program 11111111111111111111111111111111 invoke [2]
+  Create Account: account Address { address: GcHB5GEf3wXXeUnv2S4HoD6m4brc8kwsiXDwiLG5SfQz, base: Some(61A8sSuyMwdd3U4nixQkCvHA7J3PcCJWCt92e9DCPkp3) } already in use
+  Program 11111111111111111111111111111111 failed: custom program error: 0x0
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie consumed 12231 of 200000 compute units
+  Program 9e1Ez1FHUzhEfA91hiTA8kFeJJik1sibDDtH5uoftqie failed: custom program error: 0x0
+
+
+thread 'main' panicked at /home/runner/work/arcium-tooling/arcium-tooling/cli/src/lib.rs:1497:9:
+Command Command { std: "anchor" "deploy" "--provider.cluster" "devnet" "--provider.wallet" "/home/louis/.config/solana/id.json", kill_on_drop: false } failed, exit status: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

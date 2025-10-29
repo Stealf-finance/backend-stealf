@@ -1,0 +1,281 @@
+use anchor_lang::prelude::*;
+use arcium_anchor::prelude::*;
+
+const COMP_DEF_OFFSET_PRIVATE_TRANSFER: u32 = comp_def_offset("private_transfer");
+// const COMP_DEF_OFFSET_TEST_MINIMAL: u32 = comp_def_offset("test_minimal"); // TODO: à tester plus tard
+
+declare_id!("tGMd3GGjz6NtToYRS774wnc8DcSfGvbexeDZEUgGv6h");
+
+#[arcium_program]
+pub mod private_transfer {
+    use super::*;
+
+    /// Initialise le registre des utilisateurs (à appeler une seule fois)
+    pub fn init_user_registry(ctx: Context<InitUserRegistry>) -> Result<()> {
+        let registry = &mut ctx.accounts.user_registry;
+        registry.next_user_id = 0;
+        registry.bump = ctx.bumps.user_registry;
+        msg!("User registry initialized");
+        Ok(())
+    }
+
+    /// Enregistre un nouvel utilisateur et lui assigne un ID unique
+    pub fn register_user(ctx: Context<RegisterUser>) -> Result<()> {
+        let registry = &mut ctx.accounts.user_registry;
+        let balance_account = &mut ctx.accounts.balance_account;
+
+        // Assigner un ID unique
+        let user_id = registry.next_user_id;
+        registry.next_user_id = registry.next_user_id.checked_add(1)
+            .ok_or(ErrorCode::UserIdOverflow)?;
+
+        // Initialiser le compte de balance
+        balance_account.user_id = user_id;
+        balance_account.owner_address = ctx.accounts.user.key();
+        balance_account.encrypted_balance = [0; 32]; // Balance initiale = 0 (chiffrée)
+        balance_account.nonce = 0;
+        balance_account.bump = ctx.bumps.balance_account;
+
+        msg!("User registered with ID: {}", user_id);
+        Ok(())
+    }
+
+    /// Initialise la computation definition pour le transfert privé
+    pub fn init_private_transfer_comp_def(ctx: Context<InitPrivateTransferCompDef>) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    // TODO: test_minimal instructions - à implémenter plus tard pour débugger la taille du callback
+
+    /// Effectue un transfert privé entre deux utilisateurs
+    /// Les IDs sont en clair pour les PDAs, mais re-chiffrés pour le calcul MPC
+    pub fn private_transfer(
+        ctx: Context<PrivateTransfer>,
+        computation_offset: u64,
+        sender_id: u32,                      // Clair (pour PDA)
+        receiver_id: u32,                    // Clair (pour PDA)
+        sender_id_encrypted: [u8; 32],       // Chiffré (pour MPC)
+        receiver_id_encrypted: [u8; 32],     // Chiffré (pour MPC)
+        amount_encrypted: [u8; 32],          // Chiffré
+        sender_balance_encrypted: [u8; 32],  // Chiffré
+        receiver_balance_encrypted: [u8; 32],// Chiffré
+        client_pubkey: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        // Vérifier que l'appelant est bien le propriétaire du compte sender
+        require_keys_eq!(
+            ctx.accounts.sender_balance.owner_address,
+            ctx.accounts.payer.key(),
+            ErrorCode::Unauthorized
+        );
+
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+        let args = vec![
+            Argument::ArcisPubkey(client_pubkey),
+            Argument::PlaintextU128(nonce),
+            Argument::EncryptedU32(sender_id_encrypted),
+            Argument::EncryptedU32(receiver_id_encrypted),
+            Argument::EncryptedU64(amount_encrypted),
+            Argument::EncryptedU64(sender_balance_encrypted),
+            Argument::EncryptedU64(receiver_balance_encrypted),
+        ];
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            None,
+            vec![PrivateTransferCallback::callback_ix(&[])],
+        )?;
+
+        Ok(())
+    }
+
+    /// Callback qui reçoit le résultat du calcul MPC
+    #[arcium_callback(encrypted_ix = "private_transfer")]
+    pub fn private_transfer_callback(
+        ctx: Context<PrivateTransferCallback>,
+        output: ComputationOutputs<PrivateTransferOutput>,
+    ) -> Result<()> {
+        let result = match output {
+            ComputationOutputs::Success(PrivateTransferOutput { field_0 }) => field_0,
+            _ => return Err(ErrorCode::AbortedComputation.into()),
+        };
+
+        // Le résultat contient le struct TransferOutput chiffré
+        // field_0 contient tout le struct TransferOutput
+        // On va utiliser les indices des ciphertexts pour extraire chaque champ
+
+        // Note: Le MPC retourne les champs du struct dans l'ordre:
+        // [0] = success (bool)
+        // [1] = new_sender_balance (u64)
+        // [2] = new_receiver_balance (u64)
+
+        let success_encrypted = if result.ciphertexts.len() > 0 {
+            result.ciphertexts[0]
+        } else {
+            [0; 32]
+        };
+
+        let new_sender_balance_encrypted = if result.ciphertexts.len() > 1 {
+            result.ciphertexts[1]
+        } else {
+            ctx.accounts.sender_balance.encrypted_balance
+        };
+
+        let new_receiver_balance_encrypted = if result.ciphertexts.len() > 2 {
+            result.ciphertexts[2]
+        } else {
+            ctx.accounts.receiver_balance.encrypted_balance
+        };
+
+        // Mettre à jour les balances chiffrées on-chain
+        ctx.accounts.sender_balance.encrypted_balance = new_sender_balance_encrypted;
+        ctx.accounts.sender_balance.nonce = result.nonce;
+
+        ctx.accounts.receiver_balance.encrypted_balance = new_receiver_balance_encrypted;
+        ctx.accounts.receiver_balance.nonce = result.nonce;
+
+        // Émettre événement
+        emit!(TransferCompleted {
+            sender_id: ctx.accounts.sender_balance.user_id,
+            receiver_id: ctx.accounts.receiver_balance.user_id,
+            success_encrypted,
+            nonce: result.nonce.to_le_bytes(),
+        });
+
+        msg!("Private transfer completed");
+        Ok(())
+    }
+}
+
+/// Registre global des utilisateurs
+#[account]
+pub struct UserRegistry {
+    pub next_user_id: u32,
+    pub bump: u8,
+}
+
+/// Compte de balance chiffrée pour un utilisateur
+#[account]
+pub struct EncryptedBalance {
+    pub user_id: u32,                   // ID de l'utilisateur
+    pub owner_address: Pubkey,          // Adresse du propriétaire
+    pub encrypted_balance: [u8; 32],    // Balance chiffrée
+    pub nonce: u128,                    // Nonce pour le chiffrement
+    pub bump: u8,
+}
+
+#[derive(Accounts)]
+pub struct InitUserRegistry<'info> {
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + 4 + 1,
+        seeds = [b"user_registry"],
+        bump
+    )]
+    pub user_registry: Account<'info, UserRegistry>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RegisterUser<'info> {
+    #[account(
+        mut,
+        seeds = [b"user_registry"],
+        bump = user_registry.bump
+    )]
+    pub user_registry: Account<'info, UserRegistry>,
+
+    #[account(
+        init,
+        payer = payer,  // Le payer (server) paie les frais
+        space = 8 + 4 + 32 + 32 + 16 + 1,
+        seeds = [b"balance", user_registry.next_user_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub balance_account: Account<'info, EncryptedBalance>,
+
+    /// CHECK: L'utilisateur dont on crée le compte (ne paie PAS les frais)
+    /// Utilisé uniquement pour identifier le propriétaire du compte balance
+    pub user: AccountInfo<'info>,
+
+    /// Le payer qui paie les frais d'initialisation (server keypair)
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[queue_computation_accounts("private_transfer", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct PrivateTransfer<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    // ✅ Le macro génère automatiquement tous les comptes Arcium!
+}
+
+#[callback_accounts("private_transfer")]
+#[derive(Accounts)]
+#[instruction(sender_id: u32, receiver_id: u32)]
+pub struct PrivateTransferCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(
+        address = derive_comp_def_pda!(COMP_DEF_OFFSET_PRIVATE_TRANSFER)
+    )]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instructions_sysvar, checked by the account constraint
+    pub instructions_sysvar: AccountInfo<'info>,
+
+    // Comptes custom pour mettre à jour les balances
+    #[account(
+        mut,
+        seeds = [b"balance", sender_id.to_le_bytes().as_ref()],
+        bump = sender_balance.bump,
+    )]
+    pub sender_balance: Account<'info, EncryptedBalance>,
+
+    #[account(
+        mut,
+        seeds = [b"balance", receiver_id.to_le_bytes().as_ref()],
+        bump = receiver_balance.bump,
+    )]
+    pub receiver_balance: Account<'info, EncryptedBalance>,
+}
+
+#[init_computation_definition_accounts("private_transfer", payer)]
+#[derive(Accounts)]
+pub struct InitPrivateTransferCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    // ✅ Le macro génère automatiquement tous les autres comptes!
+}
+
+// TODO: test_minimal account structs - à implémenter plus tard
+
+#[event]
+pub struct TransferCompleted {
+    pub sender_id: u32,
+    pub receiver_id: u32,
+    pub success_encrypted: [u8; 32],
+    pub nonce: [u8; 16],
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("The computation was aborted")]
+    AbortedComputation,
+    #[msg("Cluster not set")]
+    ClusterNotSet,
+    #[msg("Unauthorized: You are not the owner of this balance account")]
+    Unauthorized,
+    #[msg("User ID overflow")]
+    UserIdOverflow,
+}

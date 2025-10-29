@@ -1,0 +1,22 @@
+Deploying MXE program...
+Deploying cluster: https://api.devnet.solana.com
+Upgrade authority: /home/louis/.config/solana/id.json
+Deploying program "private"...
+Program path: /home/louis/Images/Stealf/apps/api/private/target/deploy/private.so...
+Program Id: ETCfEycvdmHqnkTJRRnPVh7byHaQ9GBL75qJLHF14xzJ
+
+Signature: 4fP26WrbrBkQp756BbcrHAn6p5MU9a54gw95Vwp8XUWpXNvAf9dQVFmt2orQR9WiAcJmchQAxufThWJg6ksqxhnc
+
+Idl data length: 2984 bytes
+Step 0/2984 
+Step 600/2984 
+Step 1200/2984 
+Step 1800/2984 
+Step 2400/2984 
+Idl account created: 2HaFXQ4xdPgPbSkCD7oWQngnAd82HC92aEPRTSVKQe1q
+Deploy success
+Initializing MXE account...
+
+thread 'main' panicked at /home/runner/work/arcium-tooling/arcium-tooling/client/src/transactions.rs:374:10:
+called `Result::unwrap()` on an `Err` value: SolanaClientError(Error { request: Some(SendTransaction), kind: RpcError(RpcResponseError { code: -32002, message: "Transaction simulation failed: Error processing Instruction 0: custom program error: 0x0", data: SendTransactionPreflightFailure(RpcSimulateTransactionResult { err: Some(InstructionError(0, Custom(0))), logs: Some(["Program BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6 invoke [1]", "Program log: Instruction: InitMxe", "Program 11111111111111111111111111111111 invoke [2]", "Allocate: account Address { address: 2yHKcbiDYcnojrSnirxbQV7Qa45yJxDBimWkN1DfR5Rg, base: None } already in use", "Program 11111111111111111111111111111111 failed: custom program error: 0x0", "Program BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6 consumed 22977 of 200000 compute units", "Program BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6 failed: custom program error: 0x0"]), accounts: None, units_consumed: Some(22977), return_data: None, inner_instructions: None, replacement_blockhash: None }) }) })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
