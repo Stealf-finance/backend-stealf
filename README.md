@@ -1,6 +1,6 @@
 # Stealf Backend - GRID SDK
 
-Backend pour l'application Stealf utilisant le SDK GRID pour la gestion des comptes et transactions Solana.
+Backend for the Stealf application using the GRID SDK for Solana account and transaction management.
 
 ## 🚀 Installation
 
@@ -10,37 +10,37 @@ npm install
 
 ## ⚙️ Configuration
 
-1. Copiez le fichier `.env.example` en `.env`:
+1. Copy the `.env.example` file to `.env`:
 ```bash
 cp .env.example .env
 ```
 
-2. Configurez vos variables d'environnement dans `.env`:
+2. Configure your environment variables in `.env`:
 ```env
 PORT=3001
 NODE_ENV=development
-GRID_API_KEY=votre_cle_api_grid
+GRID_API_KEY=your_grid_api_key
 GRID_ENV=sandbox
 ```
 
-## 🏃 Démarrage
+## 🏃 Getting Started
 
-### Mode développement (avec hot reload)
+### Development mode (with hot reload)
 ```bash
 npm run dev
 ```
 
-### Mode production
+### Production mode
 ```bash
 npm run build
 npm start
 ```
 
-## 📡 Endpoints API
+## 📡 API Endpoints
 
-### Authentification
+### Authentication
 
-#### Initier l'authentification (Étape 1)
+#### Initiate authentication (Step 1)
 ```http
 POST /grid/auth
 Content-Type: application/json
@@ -50,14 +50,14 @@ Content-Type: application/json
 }
 ```
 
-**Réponse:**
+**Response:**
 ```json
 {
   "session_id": "string"
 }
 ```
 
-#### Vérifier l'OTP (Étape 2)
+#### Verify OTP (Step 2)
 ```http
 POST /grid/auth/verify
 Content-Type: application/json
@@ -68,9 +68,9 @@ Content-Type: application/json
 }
 ```
 
-### Création de compte
+### Account Creation
 
-#### Créer un compte (Étape 1)
+#### Create an account (Step 1)
 ```http
 POST /grid/accounts
 Content-Type: application/json
@@ -80,7 +80,7 @@ Content-Type: application/json
 }
 ```
 
-#### Vérifier l'OTP et finaliser la création (Étape 2)
+#### Verify OTP and finalize creation (Step 2)
 ```http
 POST /grid/accounts/verify
 Content-Type: application/json
@@ -95,9 +95,9 @@ Content-Type: application/json
 }
 ```
 
-### Gestion des comptes
+### Account Management
 
-#### Créer un smart account
+#### Create a smart account
 ```http
 POST /grid/smart-accounts
 Content-Type: application/json
@@ -107,7 +107,7 @@ Content-Type: application/json
 }
 ```
 
-#### Récupérer le solde
+#### Get balance
 ```http
 POST /grid/balance
 Content-Type: application/json
@@ -117,14 +117,14 @@ Content-Type: application/json
 }
 ```
 
-#### Récupérer les transferts
+#### Get transfers
 ```http
 GET /grid/transfers?smart_account_address=SolanaAddress...
 ```
 
 ### Transactions
 
-#### Créer une intention de paiement
+#### Create a payment intent
 ```http
 POST /grid/payment-intent
 Content-Type: application/json
@@ -138,7 +138,7 @@ Content-Type: application/json
 }
 ```
 
-#### Confirmer et envoyer la transaction
+#### Confirm and send transaction
 ```http
 POST /grid/confirm
 Content-Type: application/json
@@ -149,58 +149,58 @@ Content-Type: application/json
 }
 ```
 
-## 🏗️ Structure du projet
+## 🏗️ Project Structure
 
 ```
 new-back/
 ├── src/
 │   ├── config/
-│   │   └── gridClient.ts       # Configuration du SDK GRID
+│   │   └── gridClient.ts       # GRID SDK configuration
 │   ├── routes/
-│   │   ├── auth.routes.ts      # Routes d'authentification
-│   │   ├── account.routes.ts   # Routes de gestion des comptes
-│   │   └── transaction.routes.ts # Routes de transactions
+│   │   ├── auth.routes.ts      # Authentication routes
+│   │   ├── account.routes.ts   # Account management routes
+│   │   └── transaction.routes.ts # Transaction routes
 │   ├── types/
-│   │   └── errors.ts           # Types d'erreurs
-│   └── server.ts               # Serveur Express principal
-├── .env.example                # Template de configuration
+│   │   └── errors.ts           # Error types
+│   └── server.ts               # Main Express server
+├── .env.example                # Configuration template
 ├── .gitignore
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
-## 🔧 Technologies utilisées
+## 🔧 Technologies Used
 
-- **Express.js** - Framework web
-- **TypeScript** - Langage typé
-- **@sqds/grid** - SDK GRID pour Solana
-- **dotenv** - Gestion des variables d'environnement
-- **cors** - Gestion CORS
+- **Express.js** - Web framework
+- **TypeScript** - Typed language
+- **@sqds/grid** - GRID SDK for Solana
+- **dotenv** - Environment variable management
+- **cors** - CORS management
 
-## 📝 Notes importantes
+## 📝 Important Notes
 
-- Le backend utilise le SDK GRID en mode serveur (avec API Key)
-- L'API Key GRID ne doit JAMAIS être exposée au frontend
-- Utilisez `sandbox` pour le développement et les tests
-- Le SDK détermine automatiquement l'endpoint GRID basé sur `GRID_ENV`
+- The backend uses the GRID SDK in server mode (with API Key)
+- The GRID API Key must NEVER be exposed to the frontend
+- Use `sandbox` for development and testing
+- The SDK automatically determines the GRID endpoint based on `GRID_ENV`
 
-## 🛡️ Sécurité
+## 🛡️ Security
 
-- Ne commitez jamais le fichier `.env`
-- Gardez votre `GRID_API_KEY` secrète
-- Utilisez HTTPS en production
-- Configurez CORS correctement avec `CORS_ORIGINS`
+- Never commit the `.env` file
+- Keep your `GRID_API_KEY` secret
+- Use HTTPS in production
+- Configure CORS properly with `CORS_ORIGINS`
 
 ## 🚨 Health Check
 
-Pour vérifier que le serveur fonctionne:
+To verify the server is running:
 
 ```bash
 curl http://localhost:3001/health
 ```
 
-Réponse:
+Response:
 ```json
 {
   "status": "ok",
@@ -209,6 +209,6 @@ Réponse:
 }
 ```
 
-## 📚 Documentation GRID
+## 📚 GRID Documentation
 
-Pour plus d'informations sur le SDK GRID, consultez la documentation officielle.
+For more information on the GRID SDK, consult the official documentation.
