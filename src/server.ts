@@ -1,120 +1,95 @@
-/**
- * Stealf Auth Bridge - Point d'entrée du serveur
- * Bridge d'authentification pour Grid Protocol (Squads)
- */
-
+import express, { Express, Request, Response } from 'express';
+import cors from 'cors';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
-import { createApp } from './config/app.js';
+import authRoutes from './routes/auth.routes';
+import accountRoutes from './routes/account.routes';
+import transactionRoutes from './routes/transaction.routes';
 
-// Charger variables d'environnement
-dotenv.config({ path: '.env' });
+// Load environment variables
+dotenv.config();
 
-const PORT = Number(process.env.PORT) || 3001;
-const HOST = '0.0.0.0'; // Écouter sur toutes interfaces réseau
+const app: Express = express();
+const PORT = process.env.PORT || 3001;
 
-/**
- * Connexion à MongoDB
- */
-async function connectDatabase(): Promise<void> {
-  const MONGODB_URI = process.env.MONGODB_URI;
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  if (!MONGODB_URI) {
-    console.warn('⚠️  No MONGODB_URI found, running without MongoDB');
-    return;
-  }
+// CORS Configuration
+const corsOptions = {
+    origin: process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',')
+        : '*',
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 
-  try {
-    await mongoose.connect(MONGODB_URI);
-    console.log('✅ MongoDB connected');
-  } catch (err) {
-    console.error('❌ MongoDB connection error:', err);
-    console.warn('⚠️  Starting server without MongoDB...');
-  }
-}
-
-/**
- * Démarrage du serveur
- */
-async function startServer(): Promise<void> {
-  // Connexion MongoDB d'abord
-  await connectDatabase();
-
-  // Créer application Express
-  const app = createApp();
-
-  // Démarrer le serveur
-  const server = app.listen(PORT, HOST, () => {
-    console.log(`\n${'═'.repeat(60)}`);
-    console.log(`🚀 Kero Auth Bridge Server`);
-    console.log(`${'═'.repeat(60)}\n`);
-    console.log(`🌐 Server running on: http://localhost:${PORT}`);
-    console.log(`🌍 Network: http://${HOST}:${PORT}`);
-    console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`💾 MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}\n`);
-
-    console.log(`📋 Available Routes:\n`);
-    console.log(`  🔐 AUTHENTICATION:`);
-    console.log(`    POST   /grid/auth                        - Initiate Auth (Send OTP)`);
-    console.log(`    POST   /grid/auth/verify                 - Verify Auth OTP + JWT\n`);
-
-    console.log(`  👤 ACCOUNT MANAGEMENT:`);
-    console.log(`    POST   /grid/accounts                    - Create Account (Send OTP)`);
-    console.log(`    POST   /grid/accounts/verify             - Verify OTP + Create Wallet`);
-    console.log(`    GET    /grid/accounts/:address           - Get Account Details`);
-    console.log(`    PATCH  /grid/accounts/:address           - Update Account`);
-    console.log(`    GET    /grid/accounts/:address/balances  - Get Balance`);
-    console.log(`    GET    /grid/accounts/:address/transactions - Get Transactions\n`);
-
-    console.log(`  ⚙️  UTILITIES:`);
-    console.log(`    GET    /health                           - Health Check`);
-    console.log(`    POST   /internal/generate-hpke-keys      - Generate HPKE Keys\n`);
-
-    console.log(`${'═'.repeat(60)}\n`);
-  });
-
-  // Graceful shutdown
-  const shutdown = async (signal: string) => {
-    console.log(`\n🛑 ${signal} received, shutting down gracefully...`);
-
-    // Fermer le serveur HTTP
-    server.close(() => {
-      console.log('✅ HTTP server closed');
-
-      // Fermer connexion MongoDB
-      mongoose.connection.close().then(() => {
-        console.log('✅ MongoDB connection closed');
-        process.exit(0);
-      }).catch((err) => {
-        console.error('❌ Error closing MongoDB:', err);
-        process.exit(1);
-      });
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+    res.status(200).json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        environment: process.env.GRID_ENV || 'not configured'
     });
-
-    // Force shutdown après 10s
-    setTimeout(() => {
-      console.error('⚠️  Forcing shutdown after timeout');
-      process.exit(1);
-    }, 10000);
-  };
-
-  // Handlers pour signaux système
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
-
-  // Handler pour erreurs non gérées
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  });
-
-  process.on('uncaughtException', (error) => {
-    console.error('❌ Uncaught Exception:', error);
-    shutdown('UNCAUGHT_EXCEPTION');
-  });
-}
-
-// Démarrer le serveur
-startServer().catch((err) => {
-  console.error('❌ Failed to start server:', err);
-  process.exit(1);
 });
+
+// Debug endpoint - REMOVE IN PRODUCTION
+app.get('/debug/env', (req: Request, res: Response) => {
+    res.status(200).json({
+        GRID_ENV: process.env.GRID_ENV || 'not set',
+        GRID_ENDPOINT: process.env.GRID_ENDPOINT || 'not set',
+        GRID_API_KEY: process.env.GRID_API_KEY ? '***configured***' : 'not set',
+        PORT: process.env.PORT || 'not set',
+        NODE_ENV: process.env.NODE_ENV || 'not set'
+    });
+});
+
+// Routes
+app.use('/', authRoutes);
+app.use('/', accountRoutes);
+app.use('/', transactionRoutes);
+
+// 404 Handler
+app.use((req: Request, res: Response) => {
+    res.status(404).json({
+        error: 'Not Found',
+        path: req.path
+    });
+});
+
+// Error Handler
+app.use((err: any, req: Request, res: Response, next: any) => {
+    console.error('Unhandled error:', err);
+    res.status(err.status || 500).json({
+        error: err.message || 'Internal Server Error',
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    });
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`
+╔═══════════════════════════════════════════╗
+║   Stealf Backend Server                   ║
+║   Powered by GRID SDK                     ║
+╚═══════════════════════════════════════════╝
+
+🚀 Server running on port ${PORT}
+🌍 Environment: ${process.env.GRID_ENV || 'not configured'}
+📡 Health check: http://localhost:${PORT}/health
+
+Available endpoints:
+  POST   /grid/auth
+  POST   /grid/auth/verify
+  POST   /grid/accounts
+  POST   /grid/accounts/verify
+  POST   /grid/smart-accounts
+  POST   /grid/balance
+  GET    /grid/transfers
+  POST   /grid/payment-intent
+  POST   /grid/confirm
+    `);
+});
+
+export default app;

@@ -1,39 +1,34 @@
 {
-  "name": "kero-auth-bridge",
-  "version": "0.1.0",
-  "type": "module",
+  "name": "stealf-backend",
+  "version": "1.0.0",
+  "description": "Backend for Stealf application using GRID SDK",
+  "main": "dist/server.js",
   "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "dev": "tsx watch src/server.ts",
-    "dev:old": "tsx watch src/unified-bridge.ts",
     "start": "node dist/server.js",
-    "migrate:indexes": "tsx src/scripts/createIndexes.ts"
+    "lint": "eslint src --ext .ts"
   },
+  "keywords": [
+    "grid",
+    "solana",
+    "crypto",
+    "wallet"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "@arcium-hq/client": "^0.3.0",
-    "@arcium-hq/reader": "^0.3.0",
-    "@hpke/core": "^1.7.4",
-    "@noble/curves": "^2.0.1",
-    "@noble/hashes": "^2.0.1",
-    "@solana/web3.js": "^1.98.4",
-    "@types/express": "^5.0.3",
-    "@types/jsonwebtoken": "^9.0.10",
-    "axios": "^1.12.2",
+    "@sqds/grid": "^0.0.9",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
-    "express": "^5.1.0",
-    "hpke-js": "^1.6.4",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.18.1",
-    "tweetnacl": "^1.0.3",
-    "tweetnacl-util": "^0.15.1",
-    "uuid": "^13.0.0"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-validator": "^7.2.1"
   },
   "devDependencies": {
-    "@types/bn.js": "^5.2.0",
-    "@types/cors": "^2.8.19",
-    "@types/node": "^24.3.3",
-    "tsx": "^4.19.2",
-    "typescript": "^5.9.2"
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.3"
   }
 }
