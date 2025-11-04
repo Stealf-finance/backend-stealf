@@ -1,214 +1,132 @@
-# Stealf Backend - GRID SDK
+# Anonymous Transfer - Arcium MPC Program
 
-Backend for the Stealf application using the GRID SDK for Solana account and transaction management.
+## Architecture
 
-## 🚀 Installation
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     FLOW ENCRYPTION / DECRYPTION                │
+└─────────────────────────────────────────────────────────────────┘
+
+![workflow-link-wallet](./app/assets/workflow-link-wallet.png)
+```
+
+
+## Current Status
+
+⚠️ **Environment: LOCALNET only**
+
+This program is currently configured to work on **localnet** only. MPC circuits are stored on Supabase (offchain storage) to avoid size issues.
+
+
+## Project Structure
+
+This project follows the classic Anchor structure with an Arcium-specific addition:
+
+- **`programs/`**: Solana program (on-chain instructions)
+- **`encrypted-ixs/`**: MPC circuits for confidential computing (Arcis framework)
+- **`tests/`**: TypeScript tests
+- **`build/`**: Compiled circuits (.arcis files)
+
+
+## Commands
+
+### Build
+
+Compiles the Solana program and MPC circuits:
 
 ```bash
-npm install
+arcium build
 ```
 
-## ⚙️ Configuration
+This command:
+- Compiles Arcis circuits (`encrypted-ixs/`) into `.arcis` files
+- Compiles the Solana Anchor program
+- Generates the IDL
 
-1. Copy the `.env.example` file to `.env`:
-```bash
-cp .env.example .env
-```
+### Test
 
-2. Configure your environment variables in `.env`:
-```env
-PORT=3001
-NODE_ENV=development
-GRID_API_KEY=your_grid_api_key
-GRID_ENV=sandbox
-```
-
-## 🏃 Getting Started
-
-### Development mode (with hot reload)
-```bash
-npm run dev
-```
-
-### Production mode
-```bash
-npm run build
-npm start
-```
-
-## 📡 API Endpoints
-
-### Authentication
-
-#### Initiate authentication (Step 1)
-```http
-POST /grid/auth
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-```
-
-**Response:**
-```json
-{
-  "session_id": "string"
-}
-```
-
-#### Verify OTP (Step 2)
-```http
-POST /grid/auth/verify
-Content-Type: application/json
-
-{
-  "session_id": "string",
-  "otp_code": "123456"
-}
-```
-
-### Account Creation
-
-#### Create an account (Step 1)
-```http
-POST /grid/accounts
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-```
-
-#### Verify OTP and finalize creation (Step 2)
-```http
-POST /grid/accounts/verify
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "otp_code": "123456",
-  "sessionSecrets": {},
-  "user": {
-    "email": "user@example.com"
-  }
-}
-```
-
-### Account Management
-
-#### Create a smart account
-```http
-POST /grid/smart-accounts
-Content-Type: application/json
-
-{
-  "network": "solana-devnet"
-}
-```
-
-#### Get balance
-```http
-POST /grid/balance
-Content-Type: application/json
-
-{
-  "smartAccountAddress": "SolanaAddress..."
-}
-```
-
-#### Get transfers
-```http
-GET /grid/transfers?smart_account_address=SolanaAddress...
-```
-
-### Transactions
-
-#### Create a payment intent
-```http
-POST /grid/payment-intent
-Content-Type: application/json
-
-{
-  "smartAccountAddress": "SolanaAddress...",
-  "payload": {
-    "amount": "1000000",
-    "destination": "DestinationAddress..."
-  }
-}
-```
-
-#### Confirm and send transaction
-```http
-POST /grid/confirm
-Content-Type: application/json
-
-{
-  "address": "SolanaAddress...",
-  "signedTransactionPayload": "base64_encoded_transaction"
-}
-```
-
-## 🏗️ Project Structure
-
-```
-new-back/
-├── src/
-│   ├── config/
-│   │   └── gridClient.ts       # GRID SDK configuration
-│   ├── routes/
-│   │   ├── auth.routes.ts      # Authentication routes
-│   │   ├── account.routes.ts   # Account management routes
-│   │   └── transaction.routes.ts # Transaction routes
-│   ├── types/
-│   │   └── errors.ts           # Error types
-│   └── server.ts               # Main Express server
-├── .env.example                # Configuration template
-├── .gitignore
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-## 🔧 Technologies Used
-
-- **Express.js** - Web framework
-- **TypeScript** - Typed language
-- **@sqds/grid** - GRID SDK for Solana
-- **dotenv** - Environment variable management
-- **cors** - CORS management
-
-## 📝 Important Notes
-
-- The backend uses the GRID SDK in server mode (with API Key)
-- The GRID API Key must NEVER be exposed to the frontend
-- Use `sandbox` for development and testing
-- The SDK automatically determines the GRID endpoint based on `GRID_ENV`
-
-## 🛡️ Security
-
-- Never commit the `.env` file
-- Keep your `GRID_API_KEY` secret
-- Use HTTPS in production
-- Configure CORS properly with `CORS_ORIGINS`
-
-## 🚨 Health Check
-
-To verify the server is running:
+Runs tests on an Arcium localnet:
 
 ```bash
-curl http://localhost:3001/health
+arcium test
 ```
 
-Response:
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-10-21T...",
-  "environment": "sandbox"
+This command:
+- Starts a local Solana validator
+- Launches 2 Arcium MPC nodes via Docker
+- Executes TypeScript tests
+- Cleans up the environment
+
+**Note**: Requires Docker and only works on **Linux AMD64**.
+
+### Other Useful Commands
+
+```bash
+# Clean artifacts
+arcium clean
+
+# Build circuits only
+arcium build --circuits-only
+
+# Deploy to testnet (configure in Anchor.toml)
+arcium deploy --network testnet
+```
+
+## Configuration
+
+### Offchain Circuit Storage
+
+Circuits are stored on Supabase. URLs are configured in:
+- `programs/anonyme_transfer/src/lib.rs` (lines 21 and 94)
+
+To change storage, modify the URLs in the `init_encrypt_pda_comp_def` and `init_decrypt_pda_comp_def` functions.
+
+### Network
+
+Configured in `Anchor.toml`:
+
+```toml
+[provider]
+cluster = "localnet"  # or "testnet", "devnet", "mainnet-beta"
+```
+
+## Code Examples
+
+### MPC Circuit (encrypted-ixs/src/lib.rs)
+
+```rust
+#[instruction]
+pub fn encrypt_pda_address(input_ctxt: Enc<Shared, [u8; 32]>) -> Enc<Shared, [u8; 32]> {
+    let input = input_ctxt.to_arcis();
+    input_ctxt.owner.from_arcis(input)
 }
 ```
 
-## 📚 GRID Documentation
+### Solana Program (programs/anonyme_transfer/src/lib.rs)
 
-For more information on the GRID SDK, consult the official documentation.
+```rust
+pub fn encrypt_pda(
+    ctx: Context<EncryptPda>,
+    computation_offset: u64,
+    ciphertext: [u8; 32],
+    pub_key: [u8; 32],
+    nonce: u128,
+) -> Result<()> {
+    ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+    let args = vec![
+        Argument::ArcisPubkey(pub_key),
+        Argument::PlaintextU128(nonce),
+        Argument::EncryptedU8(ciphertext),
+    ];
+
+    queue_computation(
+        ctx.accounts,
+        computation_offset,
+        args,
+        None,
+        vec![EncryptPdaAddressCallback::callback_ix(&[])],
+    )?;
+
+    Ok(())
+}
+```
