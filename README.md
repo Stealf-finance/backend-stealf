@@ -2,13 +2,7 @@
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     FLOW ENCRYPTION / DECRYPTION                │
-└─────────────────────────────────────────────────────────────────┘
-
 ![workflow-link-wallet](./app/assets/workflow-link-wallet.png)
-```
 
 
 ## Current Status
