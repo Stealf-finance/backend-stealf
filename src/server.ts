@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes';
 import accountRoutes from './routes/account.routes';
 import transactionRoutes from './routes/transaction.routes';
+import { initTelegramBot } from './services/telegram.service';
 
 // Load environment variables
 dotenv.config();
@@ -66,6 +67,13 @@ app.use((err: any, req: Request, res: Response, next: any) => {
         ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
     });
 });
+
+// Initialize Telegram Bot
+if (process.env.BOT_TOKEN) {
+    initTelegramBot();
+} else {
+    console.warn('⚠️  BOT_TOKEN not configured - Telegram bot disabled');
+}
 
 // Start server
 app.listen(PORT, () => {
