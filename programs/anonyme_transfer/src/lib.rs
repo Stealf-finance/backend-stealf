@@ -15,7 +15,6 @@ pub mod anonyme_transfer {
         // TODO: Upload encrypt_pda_address_testnet.arcis to public storage and replace URL
         init_comp_def(
             ctx.accounts,
-            true,
             0,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://adxlhblyyxeugiuqjgxp.supabase.co/storage/v1/object/public/arcium-circuits/encrypt_pda_address_testnet.arcis".to_string(),
@@ -46,6 +45,7 @@ pub mod anonyme_transfer {
             args,
             None,
             vec![EncryptPdaAddressCallback::callback_ix(&[])],
+            1,
         )?;
 
         Ok(())
@@ -88,7 +88,6 @@ pub mod anonyme_transfer {
         // TODO: Upload decrypt_pda_address_testnet.arcis to public storage and replace URL
         init_comp_def(
             ctx.accounts,
-            true,
             0,
             Some(CircuitSource::OffChain(OffChainCircuitSource {
                 source: "https://adxlhblyyxeugiuqjgxp.supabase.co/storage/v1/object/public/arcium-circuits/decrypt_pda_address_testnet.arcis".to_string(),
@@ -119,6 +118,7 @@ pub mod anonyme_transfer {
             args,
             None,
             vec![DecryptPdaAddressCallback::callback_ix(&[])],
+            1,
         )?;
 
         Ok(())
@@ -185,7 +185,7 @@ pub struct EncryptPda<'info> {
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
     #[account(
         mut,
-        address = derive_cluster_pda!(mxe_account)
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     pub cluster_account: Account<'info, Cluster>,
     #[account(
@@ -275,7 +275,7 @@ pub struct DecryptPda<'info> {
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
     #[account(
         mut,
-        address = derive_cluster_pda!(mxe_account)
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
     )]
     pub cluster_account: Account<'info, Cluster>,
     #[account(
