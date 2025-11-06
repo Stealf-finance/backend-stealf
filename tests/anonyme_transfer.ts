@@ -133,6 +133,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
         new anchor.BN(deserializeLE(nonce).toString())
       )
       .accountsPartial({
+        payer: owner.publicKey,
         computationAccount: getComputationAccAddress(
           program.programId,
           encryptComputationOffset
@@ -146,6 +147,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
           Buffer.from(getCompDefAccOffset("encrypt_pda_address")).readUInt32LE()
         ),
       })
+      .signers([owner])
       .rpc({ skipPreflight: true, commitment: "confirmed" });
     console.log("✅ Encrypt computation queued:", queueEncryptSig);
 
@@ -167,13 +169,14 @@ describe("Private Link - Smart Account + Private Wallet", () => {
 
     // 12. Stocker l'adresse chiffrée dans le PDA du Smart Account
     const storeSig = await program.methods
-      .storeEncryptedAddress(Array.from(encryptedPdaEvent.encrypted_address))
-      .accounts({
+      .storeEncryptedAddress(Array.from(encryptedPdaEvent.encryptedAddress))
+      .accountsPartial({
         smartAccountStorage: smartAccountStoragePDA,
         smartAccount: smartAccount.publicKey,
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
+      .signers([owner])
       .rpc();
     console.log("✅ Adresse chiffrée stockée on-chain:", storeSig);
 
@@ -183,11 +186,11 @@ describe("Private Link - Smart Account + Private Wallet", () => {
     );
     console.log("✅ Données stockées vérifiées:");
     console.log("   Owner:", storedData.owner.toBase58());
-    console.log("   Smart Account:", storedData.smart_account.toBase58());
+    console.log("   Smart Account:", storedData.smartAccount.toBase58());
     console.log("   Encrypted PDA:", Buffer.from(storedData.encryptedPdaAddress).toString("hex").slice(0, 20) + "...");
 
     expect(storedData.owner.toBase58()).to.equal(owner.publicKey.toBase58());
-    expect(storedData.smart_account.toBase58()).to.equal(
+    expect(storedData.smartAccount.toBase58()).to.equal(
       smartAccount.publicKey.toBase58()
     );
 
@@ -211,9 +214,9 @@ describe("Private Link - Smart Account + Private Wallet", () => {
     const queueDecryptSig = await program.methods
       .decryptPda(
         decryptComputationOffset,
-        Array.from(encryptedPdaEvent.encrypted_address),
+        Array.from(encryptedPdaEvent.encryptedAddress),
         Array.from(publicKey),
-        new anchor.BN(deserializeLE(encryptedPdaEvent.nonce).toString())
+        new anchor.BN(deserializeLE(Uint8Array.from(encryptedPdaEvent.nonce)).toString())
       )
       .accountsPartial({
         computationAccount: getComputationAccAddress(
@@ -244,7 +247,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
     // 17. Récupérer l'event avec l'adresse déchiffrée
     const decryptedPdaEvent = await decryptedPdaEventPromise;
     const decryptedAddress = new PublicKey(
-      decryptedPdaEvent.decrypted_address
+      decryptedPdaEvent.decryptedAddress
     );
     console.log("✅ Adresse PDA déchiffrée:", decryptedAddress.toBase58());
 
