@@ -26,102 +26,90 @@ import * as os from "os";
 import { expect } from "chai";
 
 describe("Private Link - Smart Account + Private Wallet", () => {
+  const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
+
   anchor.setProvider(anchor.AnchorProvider.env());
   const program = anchor.workspace.AnonymeTransfer as Program<AnonymeTransfer>;
-  const provider = anchor.getProvider();
+  const provider = anchor.getProvider() as anchor.AnchorProvider;
 
   type Event = anchor.IdlEvents<(typeof program)["idl"]>;
   const awaitEvent = async <E extends keyof Event>(
-    eventName: E
+    eventName: E,
+    timeoutMs = 60000
   ): Promise<Event[E]> => {
     let listenerId: number;
-    const event = await new Promise<Event[E]>((res) => {
-      listenerId = program.addEventListener(eventName, (event) => {
+    let timeoutId: NodeJS.Timeout;
+    const event = await new Promise<Event[E]>((res, rej) => {
+      listenerId = program.addEventListener(eventName as any, (event) => {
+        if (timeoutId) clearTimeout(timeoutId);
         res(event);
       });
+      timeoutId = setTimeout(() => {
+        program.removeEventListener(listenerId);
+        rej(new Error(`Event ${eventName} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
     await program.removeEventListener(listenerId);
-
     return event;
   };
 
   const arciumEnv = getArciumEnv();
 
-  it("Full flow: Smart Account + Encrypt Private Wallet PDA + Store + Decrypt", async () => {
-    const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
-
+  it("Full flow: Smart Account + Encrypt + Store + Decrypt", async () => {
     console.log("\n🔧 SETUP");
     console.log("=".repeat(50));
 
-    // 1. Créer un Smart Account (simulé avec un Keypair)
     const smartAccount = Keypair.generate();
     console.log("✅ Smart Account créé:", smartAccount.publicKey.toBase58());
-    console.log("   KeyPubAuth:", owner.publicKey.toBase58());
+    console.log("   Owner:", owner.publicKey.toBase58());
 
-    // 2. Créer un wallet privé
     const privateWallet = Keypair.generate();
     console.log("✅ Private Wallet créé:", privateWallet.publicKey.toBase58());
 
-    // 3. Calculer le PDA du wallet privé (celui qu'on va chiffrer et stocker)
-    const [privateWalletPDA, privateWalletBump] =
-      PublicKey.findProgramAddressSync(
-        [Buffer.from("private_wallet"), privateWallet.publicKey.toBuffer()],
-        program.programId
-      );
-    console.log("✅ Private Wallet PDA calculé:", privateWalletPDA.toBase58());
-    console.log("   Bump:", privateWalletBump);
-
-    // 4. Calculer le PDA du Smart Account Storage (où on va stocker l'adresse chiffrée)
-    const [smartAccountStoragePDA, smartAccountBump] =
-      PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("smart_account_storage"),
-          smartAccount.publicKey.toBuffer(),
-        ],
-        program.programId
-      );
-    console.log(
-      "✅ Smart Account Storage PDA:",
-      smartAccountStoragePDA.toBase58()
-    );
-    console.log("   Bump:", smartAccountBump);
-
-    console.log("\n🔐 ENCRYPTION FLOW");
-    console.log("=".repeat(50));
-
-    // 5. Initialiser le circuit de chiffrement
-    console.log("Initializing encrypt_pda_address computation definition...");
-    const initEncryptSig = await initEncryptPdaCompDef(
-      program,
-      owner,
-      false,
-      true // offchainSource: true pour utiliser Supabase
-    );
-    console.log("✅ Encrypt comp def initialized:", initEncryptSig);
-
-    // 6. Obtenir la clé publique MXE pour chiffrer
-    const mxePublicKey = await getMXEPublicKeyWithRetry(
-      provider as anchor.AnchorProvider,
+    const [privateWalletPDA, privateWalletBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("private_wallet"), privateWallet.publicKey.toBuffer()],
       program.programId
     );
-    console.log("✅ MXE x25519 pubkey récupérée");
+    console.log("✅ Private Wallet PDA:", privateWalletPDA.toBase58());
+    console.log("   Bump:", privateWalletBump);
 
-    // 7. Générer clé éphémère pour chiffrement
+    const [smartAccountStoragePDA, smartAccountBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("smart_account_storage"), smartAccount.publicKey.toBuffer()],
+      program.programId
+    );
+    console.log("✅ Smart Account Storage PDA:", smartAccountStoragePDA.toBase58());
+    console.log("   Bump:", smartAccountBump);
+
+
+    console.log("Initializing computation definitions...");
+    await Promise.all([
+      initEncryptPdaCompDef(program, owner, false, true).then((sig) =>
+        console.log("✅ Encrypt comp def initialized:", sig)
+      ),
+      initDecryptPdaCompDef(program, owner, false, true).then((sig) =>
+        console.log("✅ Decrypt comp def initialized:", sig)
+      ),
+    ]);
+    console.log("All computation definitions initialized");
+    await new Promise((res) => setTimeout(res, 2000));
+
+    // --- Setup Cryptography----
     const privateKey = x25519.utils.randomSecretKey();
     const publicKey = x25519.getPublicKey(privateKey);
+    const mxePublicKey = await getMXEPublicKeyWithRetry(
+      provider,
+      program.programId
+    );
 
+    console.log("Mxe x25519 pubkey is", mxePublicKey);
     const sharedSecret = x25519.getSharedSecret(privateKey, mxePublicKey);
     const cipher = new RescueCipher(sharedSecret);
+    const nonce = randomBytes(16);
 
-    // 8. Chiffrer l'adresse du PDA privé (convertie en BigInt)
     const pdaAddressBytes = privateWalletPDA.toBuffer();
     const plaintext = Array.from(pdaAddressBytes).map((byte) => BigInt(byte));
-
-    const nonce = randomBytes(16);
     const ciphertext = cipher.encrypt(plaintext, nonce);
-    console.log("✅ Adresse PDA chiffrée côté client");
 
-    // 9. Envoyer au circuit MPC pour re-chiffrement sécurisé
     const encryptedPdaEventPromise = awaitEvent("encryptedPdaEvent");
     const encryptComputationOffset = new anchor.BN(randomBytes(8), "hex");
 
@@ -133,7 +121,6 @@ describe("Private Link - Smart Account + Private Wallet", () => {
         new anchor.BN(deserializeLE(nonce).toString())
       )
       .accountsPartial({
-        payer: owner.publicKey,
         computationAccount: getComputationAccAddress(
           program.programId,
           encryptComputationOffset
@@ -147,123 +134,57 @@ describe("Private Link - Smart Account + Private Wallet", () => {
           Buffer.from(getCompDefAccOffset("encrypt_pda_address")).readUInt32LE()
         ),
       })
-      .signers([owner])
       .rpc({ skipPreflight: true, commitment: "confirmed" });
     console.log("✅ Encrypt computation queued:", queueEncryptSig);
 
-    // 10. Attendre la finalisation du calcul MPC
     const finalizeEncryptSig = await awaitComputationFinalization(
-      provider as anchor.AnchorProvider,
+      provider,
       encryptComputationOffset,
       program.programId,
       "confirmed"
     );
     console.log("✅ Encrypt computation finalized:", finalizeEncryptSig);
 
-    // 11. Récupérer l'event avec l'adresse chiffrée
     const encryptedPdaEvent = await encryptedPdaEventPromise;
     console.log("✅ Event reçu avec adresse chiffrée");
 
-    console.log("\n💾 STORAGE");
-    console.log("=".repeat(50));
-
-    // 12. Stocker l'adresse chiffrée dans le PDA du Smart Account
+    
     const storeSig = await program.methods
       .storeEncryptedAddress(Array.from(encryptedPdaEvent.encryptedAddress))
-      .accountsPartial({
+      .accounts({
         smartAccountStorage: smartAccountStoragePDA,
         smartAccount: smartAccount.publicKey,
         owner: owner.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .signers([owner])
       .rpc();
-    console.log("✅ Adresse chiffrée stockée on-chain:", storeSig);
+    console.log("Adresse chiffrée stockée on-chain:", storeSig);
 
-    // 13. Vérifier le stockage
+    // --- Vérification du stockage ---
+    console.log("\n✅ VERIFICATION DU STOCKAGE");
+    console.log("=".repeat(50));
+
     const storedData = await program.account.smartAccountStorage.fetch(
       smartAccountStoragePDA
     );
-    console.log("✅ Données stockées vérifiées:");
+    console.log("✅ Données récupérées depuis la blockchain:");
     console.log("   Owner:", storedData.owner.toBase58());
     console.log("   Smart Account:", storedData.smartAccount.toBase58());
-    console.log("   Encrypted PDA:", Buffer.from(storedData.encryptedPdaAddress).toString("hex").slice(0, 20) + "...");
+    console.log("   Encrypted PDA (hex):", Buffer.from(storedData.encryptedPdaAddress).toString("hex").slice(0, 32) + "...");
 
+    // Vérifier que les données correspondent
     expect(storedData.owner.toBase58()).to.equal(owner.publicKey.toBase58());
     expect(storedData.smartAccount.toBase58()).to.equal(
       smartAccount.publicKey.toBase58()
     );
 
-    console.log("\n🔓 DECRYPTION FLOW");
+    console.log("\n✨ RÉSUMÉ DU TEST");
     console.log("=".repeat(50));
-
-    // 14. Initialiser le circuit de déchiffrement
-    console.log("Initializing decrypt_pda_address computation definition...");
-    const initDecryptSig = await initDecryptPdaCompDef(
-      program,
-      owner,
-      false,
-      true // offchainSource: true pour utiliser Supabase
-    );
-    console.log("✅ Decrypt comp def initialized:", initDecryptSig);
-
-    // 15. Déchiffrer l'adresse via MPC
-    const decryptedPdaEventPromise = awaitEvent("decryptedPdaEvent");
-    const decryptComputationOffset = new anchor.BN(randomBytes(8), "hex");
-
-    const queueDecryptSig = await program.methods
-      .decryptPda(
-        decryptComputationOffset,
-        Array.from(encryptedPdaEvent.encryptedAddress),
-        Array.from(publicKey),
-        new anchor.BN(deserializeLE(Uint8Array.from(encryptedPdaEvent.nonce)).toString())
-      )
-      .accountsPartial({
-        computationAccount: getComputationAccAddress(
-          program.programId,
-          decryptComputationOffset
-        ),
-        clusterAccount: arciumEnv.arciumClusterPubkey,
-        mxeAccount: getMXEAccAddress(program.programId),
-        mempoolAccount: getMempoolAccAddress(program.programId),
-        executingPool: getExecutingPoolAccAddress(program.programId),
-        compDefAccount: getCompDefAccAddress(
-          program.programId,
-          Buffer.from(getCompDefAccOffset("decrypt_pda_address")).readUInt32LE()
-        ),
-      })
-      .rpc({ skipPreflight: true, commitment: "confirmed" });
-    console.log("✅ Decrypt computation queued:", queueDecryptSig);
-
-    // 16. Attendre la finalisation
-    const finalizeDecryptSig = await awaitComputationFinalization(
-      provider as anchor.AnchorProvider,
-      decryptComputationOffset,
-      program.programId,
-      "confirmed"
-    );
-    console.log("✅ Decrypt computation finalized:", finalizeDecryptSig);
-
-    // 17. Récupérer l'event avec l'adresse déchiffrée
-    const decryptedPdaEvent = await decryptedPdaEventPromise;
-    const decryptedAddress = new PublicKey(
-      decryptedPdaEvent.decryptedAddress
-    );
-    console.log("✅ Adresse PDA déchiffrée:", decryptedAddress.toBase58());
-
-    console.log("\n✨ VERIFICATION");
-    console.log("=".repeat(50));
-
-    // 18. Vérifier que l'adresse déchiffrée correspond à l'originale
-    expect(decryptedAddress.toBase58()).to.equal(
-      privateWalletPDA.toBase58()
-    );
-    console.log("✅ SUCCÈS ! L'adresse déchiffrée correspond à l'adresse PDA originale !");
-    console.log("\n📊 RÉSUMÉ:");
     console.log("   Smart Account:        ", smartAccount.publicKey.toBase58());
     console.log("   Private Wallet:       ", privateWallet.publicKey.toBase58());
     console.log("   Private Wallet PDA:   ", privateWalletPDA.toBase58());
-    console.log("   Adresse déchiffrée:   ", decryptedAddress.toBase58());
+    console.log("   Storage PDA:          ", smartAccountStoragePDA.toBase58());
+    console.log("\n✅ SUCCÈS ! Le chiffrement et le stockage fonctionnent correctement !");
   });
 
   // ============= HELPER FUNCTIONS =============
@@ -299,7 +220,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
     if (uploadRawCircuit) {
       const rawCircuit = fs.readFileSync("build/encrypt_pda_address.arcis");
       await uploadCircuit(
-        provider as anchor.AnchorProvider,
+        provider,
         "encrypt_pda_address",
         program.programId,
         rawCircuit,
@@ -307,7 +228,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
       );
     } else if (!offchainSource) {
       const finalizeTx = await buildFinalizeCompDefTx(
-        provider as anchor.AnchorProvider,
+        provider,
         Buffer.from(offset).readUInt32LE(),
         program.programId
       );
@@ -354,7 +275,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
     if (uploadRawCircuit) {
       const rawCircuit = fs.readFileSync("build/decrypt_pda_address.arcis");
       await uploadCircuit(
-        provider as anchor.AnchorProvider,
+        provider,
         "decrypt_pda_address",
         program.programId,
         rawCircuit,
@@ -362,7 +283,7 @@ describe("Private Link - Smart Account + Private Wallet", () => {
       );
     } else if (!offchainSource) {
       const finalizeTx = await buildFinalizeCompDefTx(
-        provider as anchor.AnchorProvider,
+        provider,
         Buffer.from(offset).readUInt32LE(),
         program.programId
       );

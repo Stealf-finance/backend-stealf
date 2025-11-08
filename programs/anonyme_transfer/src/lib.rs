@@ -12,7 +12,7 @@ pub mod anonyme_transfer {
     use super::*;
 
     pub fn init_encrypt_pda_comp_def(ctx: Context<InitEncryptPdaCompDef>) -> Result<()> {
-        // TODO: Upload encrypt_pda_address_testnet.arcis to public storage and replace URL
+        // Upload encrypt_pda_address_testnet.arcis to public storage and replace URL
         init_comp_def(
             ctx.accounts,
             0,
