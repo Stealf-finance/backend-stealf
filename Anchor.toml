@@ -21,3 +21,8 @@ test = "yarn test"
 
 address = "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
 program = "/home/wesker/Desktop/backend-stealf/artifacts/arcium_program_0.3.0.so"
+
+[test.validator]
+[[test.genesis]]
+address = "Bv3Fb9VjzjWGfX18QTUcVycAfeLoQ5zZN6vv2g3cTZxp"
+program = "/home/backend-stealf/artifacts/arcium_program_0.4.0.so"
