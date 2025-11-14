@@ -3,7 +3,7 @@ use arcium_anchor::prelude::*;
 
 const COMP_DEF_OFFSET_LINK_WALLETS: u32 = comp_def_offset("link_wallets");
 
-declare_id!("A26JcC1bfDZ1wV5Vkdo4rrwDcUzorjT55a6RGp7bAfzx");
+declare_id!("CJGGJceyiZqWszErY1mmkHzbVwsgeYdDe32hHZrfbwmm");
 
 #[arcium_program]
 pub mod private_wallet {

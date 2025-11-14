@@ -11,3 +11,7 @@ backends = ["Cerberus"]
 # Each path is copied to corresponding node's artifacts/manticore/computation_folder_N
 # Example: manticore_data_folders = ["./data/player-0", "./data/player-1"]
 # manticore_data_folders = []
+
+[devnet]
+# Devnet configuration - no local validator needed
+# Tests will run against the deployed program on devnet
