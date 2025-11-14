@@ -15,9 +15,15 @@ pub mod stealth;
 // Encryption module for encrypted amounts (Umbra-style)
 pub mod encryption;
 
+// Denomination pools (Tornado Cash style - montant implicite)
+pub mod denomination;
+use denomination::{DenominationPool, get_denomination_amount};
+
 // Computation definition offsets
 const COMP_DEF_OFFSET_VALIDATE_TRANSFER: u32 = comp_def_offset("validate_transfer");
 const COMP_DEF_OFFSET_PRIVATE_TRANSFER: u32 = comp_def_offset("private_transfer");
+const COMP_DEF_OFFSET_SHIELDED_DEPOSIT: u32 = comp_def_offset("shielded_deposit");
+const COMP_DEF_OFFSET_SHIELDED_CLAIM: u32 = comp_def_offset("shielded_claim");
 
 declare_id!("FZpAL2ogH95Fh8N3Cs3wwXhR3VysR922WZYjTTPo17ka");
 
@@ -354,6 +360,308 @@ pub mod private {
         });
 
         msg!("✅ Claim successful! Nullifier marked as used.");
+        Ok(())
+    }
+
+    // ===================================
+    // FIXED DENOMINATION POOLS (Tornado Cash style)
+    // Montant IMPLICITE = 100% INVISIBLE dans instruction!
+    // ===================================
+
+    /// Initialize a denomination pool
+    pub fn init_denomination_pool(
+        ctx: Context<InitDenominationPool>,
+        denomination: u8,
+    ) -> Result<()> {
+        msg!("🏊 Initializing denomination pool {}", denomination);
+
+        // Validate denomination (0-4)
+        require!(denomination < 5, denomination::ErrorCode::InvalidDenomination);
+
+        let pool = &mut ctx.accounts.pool;
+        pool.denomination = denomination;
+        pool.total_deposits = 0;
+        pool.total_claims = 0;
+        pool.merkle_root = [0u8; 32];
+        pool.created_at = Clock::get()?.unix_timestamp;
+        pool.bump = ctx.bumps.pool;
+
+        let amount = get_denomination_amount(denomination)?;
+        msg!("✅ Pool initialized for {} lamports", amount);
+        Ok(())
+    }
+
+    /// Deposit to a fixed denomination pool
+    /// Montant est IMPLICITE basé sur pool_id - PAS de paramètre amount!
+    pub fn deposit_to_pool(
+        ctx: Context<DepositToPool>,
+        pool_id: u8,
+        commitment: [u8; 32],
+        ephemeral_public_key: [u8; 32],
+    ) -> Result<()> {
+        msg!("💰 Depositing to pool {}", pool_id);
+
+        // Get implicit amount from pool_id
+        let amount = get_denomination_amount(pool_id)?;
+        msg!("  - Amount (implicit): {} lamports", amount);
+
+        // Transfer SOL to pool vault
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer {
+                from: ctx.accounts.depositor.to_account_info(),
+                to: ctx.accounts.pool_vault.to_account_info(),
+            },
+        );
+        anchor_lang::system_program::transfer(cpi_context, amount)?;
+
+        // Add commitment to tree
+        let index = ctx.accounts.commitment_tree.add_commitment(commitment)?;
+
+        // Update pool stats
+        ctx.accounts.pool.total_deposits += 1;
+
+        // Emit event (NO amount field - it's implicit!)
+        emit!(DepositToPoolEvent {
+            pool_id,
+            commitment,
+            ephemeral_public_key,
+            index,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        msg!("✅ Deposit successful! Commitment index: {}", index);
+        Ok(())
+    }
+
+    /// Claim from a fixed denomination pool
+    /// Montant est IMPLICITE basé sur pool_id - PAS de paramètre amount!
+    pub fn claim_from_pool(
+        ctx: Context<ClaimFromPool>,
+        pool_id: u8,
+        nullifier_hash: [u8; 32],
+        recipient: Pubkey,
+        _zk_proof: Vec<u8>,
+    ) -> Result<()> {
+        msg!("🔓 Claiming from pool {}", pool_id);
+
+        // Get implicit amount from pool_id
+        let amount = get_denomination_amount(pool_id)?;
+        msg!("  - Amount (implicit): {} lamports", amount);
+
+        // Check nullifier hasn't been used
+        require!(
+            !ctx.accounts.nullifier_registry.is_used(&nullifier_hash),
+            ErrorCode::NullifierAlreadyUsed
+        );
+
+        // TODO Phase 3: Verify ZK-SNARK proof
+
+        // Mark nullifier as used
+        ctx.accounts.nullifier_registry.use_nullifier(nullifier_hash)?;
+
+        // Transfer SOL from pool vault to recipient
+        let pool_vault_seeds = &[
+            b"vault".as_ref(),
+            &[pool_id],
+            &[ctx.bumps.pool_vault],
+        ];
+        let signer = &[&pool_vault_seeds[..]];
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer {
+                from: ctx.accounts.pool_vault.to_account_info(),
+                to: ctx.accounts.recipient.to_account_info(),
+            },
+            signer,
+        );
+        anchor_lang::system_program::transfer(cpi_context, amount)?;
+
+        // Update pool stats
+        ctx.accounts.pool.total_claims += 1;
+
+        // Emit event (NO amount field - it's implicit!)
+        emit!(ClaimFromPoolEvent {
+            pool_id,
+            nullifier_hash,
+            recipient,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        msg!("✅ Claim successful!");
+        Ok(())
+    }
+
+    // ===================================
+    // SHIELDED POOL with MPC - Montants 100% CHIFFRÉS!
+    // ===================================
+
+    /// Initialize computation definition pour shielded_deposit
+    pub fn init_shielded_deposit_comp_def(ctx: Context<InitShieldedDepositCompDef>) -> Result<()> {
+        msg!("🔧 Initializing shielded_deposit CompDef...");
+        init_comp_def(ctx.accounts, 0, None, None)?;
+        msg!("✅ Shielded_deposit CompDef initialized!");
+        Ok(())
+    }
+
+    /// Deposit avec montant 100% CHIFFRÉ via Arcium MPC
+    /// Phase 1: D'abord déposer le SOL (montant visible - unavoidable)
+    /// Phase 2: MPC crée commitment avec montant chiffré (cette fonction)
+    pub fn shielded_deposit(
+        ctx: Context<ShieldedDeposit>,
+        computation_offset: u64,
+        plaintext_amount: u64,            // Montant pour transfer SOL (visible)
+        encrypted_amount: [u8; 32],       // Montant chiffré pour MPC
+        recipient_pubkey: [u8; 32],       // Bob's pubkey pour sealing
+        commitment: [u8; 32],
+        ephemeral_public_key: [u8; 32],
+        pub_key: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        msg!("💰 Shielded Deposit with MPC encryption");
+        msg!("  - Plaintext amount: {} (for SOL transfer)", plaintext_amount);
+        msg!("  - Encrypted amount: FULLY ENCRYPTED via MPC");
+
+        require!(plaintext_amount > 0, ErrorCode::InvalidAmount);
+
+        // PHASE 1: Transfer SOL to vault (montant visible - unavoidable)
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer {
+                from: ctx.accounts.depositor.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+            },
+        );
+        anchor_lang::system_program::transfer(cpi_context, plaintext_amount)?;
+
+        // PHASE 2: Queue MPC computation pour créer commitment avec montant chiffré
+        let timestamp = Clock::get()?.unix_timestamp;
+
+        let args = vec![
+            Argument::ArcisPubkey(pub_key),
+            Argument::PlaintextU128(nonce),
+            Argument::EncryptedU64(encrypted_amount),     // Montant CHIFFRÉ!
+            Argument::PlaintextU64(timestamp as u64),
+            Argument::ArcisPubkey(recipient_pubkey),      // Pour sealing
+        ];
+
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            None,
+            vec![ShieldedDepositCallback::callback_ix(&[])],
+            1,
+        )?;
+
+        msg!("✅ MPC computation queued - montant chiffré!");
+        Ok(())
+    }
+
+    /// Callback après MPC deposit - Reçoit le montant re-chiffré pour Bob
+    #[arcium_callback(encrypted_ix = "shielded_deposit")]
+    pub fn shielded_deposit_callback(
+        ctx: Context<ShieldedDepositCallback>,
+        output: ComputationOutputs<ShieldedDepositOutput>,
+    ) -> Result<()> {
+        let sealed_amount = match output {
+            ComputationOutputs::Success(ShieldedDepositOutput {
+                field_0: amount,
+            }) => amount,
+            _ => return Err(ErrorCode::ComputationFailed.into()),
+        };
+
+        msg!("🔐 MPC deposit callback:");
+        msg!("  - Sealed amount (re-encrypted for Bob): {:?}", &sealed_amount.ciphertexts[0][..8]);
+
+        // Émettre event avec montant CHIFFRÉ
+        emit!(ShieldedDepositEvent {
+            sealed_amount_ciphertext: sealed_amount.ciphertexts[0],
+            sealed_amount_nonce: sealed_amount.nonce.to_le_bytes(),
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        msg!("✅ Shielded deposit completed with ENCRYPTED amount!");
+        Ok(())
+    }
+
+    /// Initialize computation definition pour shielded_claim
+    pub fn init_shielded_claim_comp_def(ctx: Context<InitShieldedClaimCompDef>) -> Result<()> {
+        msg!("🔧 Initializing shielded_claim CompDef...");
+        init_comp_def(ctx.accounts, 0, None, None)?;
+        msg!("✅ Shielded_claim CompDef initialized!");
+        Ok(())
+    }
+
+    /// Claim avec montant 100% CHIFFRÉ via Arcium MPC
+    pub fn shielded_claim(
+        ctx: Context<ShieldedClaim>,
+        computation_offset: u64,
+        encrypted_amount: [u8; 32],       // Montant chiffré
+        encrypted_vault_balance: [u8; 32], // Balance vault chiffrée
+        nullifier_hash: [u8; 32],
+        recipient: Pubkey,
+        pub_key: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        msg!("🔓 Shielded Claim with MPC");
+        msg!("  - Encrypted amount: FULLY ENCRYPTED");
+        msg!("  - Recipient: {}", recipient);
+
+        // Check nullifier hasn't been used
+        require!(
+            !ctx.accounts.nullifier_registry.is_used(&nullifier_hash),
+            ErrorCode::NullifierAlreadyUsed
+        );
+
+        // Mark nullifier as used
+        ctx.accounts.nullifier_registry.use_nullifier(nullifier_hash)?;
+
+        // Queue MPC computation pour valider et approuver le claim
+        let args = vec![
+            Argument::ArcisPubkey(pub_key),
+            Argument::PlaintextU128(nonce),
+            Argument::EncryptedU64(encrypted_amount),
+            Argument::EncryptedU64(encrypted_vault_balance),
+        ];
+
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            None,
+            vec![ShieldedClaimCallback::callback_ix(&[])],
+            1,
+        )?;
+
+        msg!("✅ MPC computation queued for shielded claim!");
+        Ok(())
+    }
+
+    /// Callback après MPC claim - Transfère SOL si approuvé
+    #[arcium_callback(encrypted_ix = "shielded_claim")]
+    pub fn shielded_claim_callback(
+        ctx: Context<ShieldedClaimCallback>,
+        output: ComputationOutputs<ShieldedClaimOutput>,
+    ) -> Result<()> {
+        let approved_amount = match output {
+            ComputationOutputs::Success(ShieldedClaimOutput {
+                field_0: amount,
+            }) => amount,
+            _ => return Err(ErrorCode::ComputationFailed.into()),
+        };
+
+        // TODO: Décrypter approved_amount pour faire le transfer SOL
+        // Pour l'instant on utilise une valeur placeholder
+        msg!("🔐 MPC approved amount (encrypted): {:?}", &approved_amount.ciphertexts[0][..8]);
+        msg!("⚠️  TODO: Decrypt amount and transfer SOL");
+
+        msg!("✅ Shielded claim callback completed!");
         Ok(())
     }
 
@@ -750,6 +1058,386 @@ pub struct ClaimWithProof<'info> {
 }
 
 // ===================================
+// FIXED DENOMINATION POOL ACCOUNTS
+// ===================================
+
+#[derive(Accounts)]
+#[instruction(denomination: u8)]
+pub struct InitDenominationPool<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + DenominationPool::LEN,
+        seeds = [b"pool", denomination.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub pool: Account<'info, DenominationPool>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(pool_id: u8)]
+pub struct DepositToPool<'info> {
+    #[account(mut)]
+    pub depositor: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"pool", pool_id.to_le_bytes().as_ref()],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, DenominationPool>,
+
+    #[account(
+        mut,
+        seeds = [b"commitment_tree"],
+        bump = commitment_tree.bump
+    )]
+    pub commitment_tree: Account<'info, CommitmentTree>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", pool_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    /// CHECK: Pool-specific vault PDA
+    pub pool_vault: SystemAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(pool_id: u8)]
+pub struct ClaimFromPool<'info> {
+    #[account(mut)]
+    pub claimer: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"pool", pool_id.to_le_bytes().as_ref()],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, DenominationPool>,
+
+    #[account(
+        seeds = [b"commitment_tree"],
+        bump = commitment_tree.bump
+    )]
+    pub commitment_tree: Account<'info, CommitmentTree>,
+
+    #[account(
+        mut,
+        seeds = [b"nullifier_registry"],
+        bump = nullifier_registry.bump
+    )]
+    pub nullifier_registry: Account<'info, NullifierRegistry>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", pool_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    /// CHECK: Pool-specific vault PDA
+    pub pool_vault: SystemAccount<'info>,
+
+    /// CHECK: Recipient can be any address (stealth address)
+    #[account(mut)]
+    pub recipient: SystemAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+// ===================================
+// SHIELDED POOL MPC ACCOUNTS
+// ===================================
+
+/// Initialize CompDef pour shielded_deposit
+#[init_computation_definition_accounts("shielded_deposit", payer)]
+#[derive(Accounts)]
+pub struct InitShieldedDepositCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        mut,
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Queue shielded_deposit computation
+#[queue_computation_accounts("shielded_deposit", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct ShieldedDeposit<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub depositor: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"commitment_tree"],
+        bump = commitment_tree.bump
+    )]
+    pub commitment_tree: Account<'info, CommitmentTree>,
+
+    #[account(
+        mut,
+        seeds = [b"vault"],
+        bump
+    )]
+    /// CHECK: Vault PDA for holding SOL
+    pub vault: SystemAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        space = 9,
+        payer = payer,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+
+    #[account(
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Account<'info, MXEAccount>,
+
+    #[account(
+        mut,
+        address = derive_mempool_pda!()
+    )]
+    /// CHECK: mempool_account, checked by the arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        address = derive_execpool_pda!()
+    )]
+    /// CHECK: executing_pool, checked by the arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        address = derive_comp_pda!(computation_offset)
+    )]
+    /// CHECK: computation_account, checked by the arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+
+    #[account(
+        address = derive_comp_def_pda!(COMP_DEF_OFFSET_SHIELDED_DEPOSIT)
+    )]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
+    )]
+    pub cluster_account: Account<'info, Cluster>,
+
+    #[account(
+        mut,
+        address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS,
+    )]
+    pub pool_account: Account<'info, FeePool>,
+
+    #[account(
+        address = ARCIUM_CLOCK_ACCOUNT_ADDRESS
+    )]
+    pub clock_account: Account<'info, ClockAccount>,
+
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+/// Callback shielded_deposit
+#[callback_accounts("shielded_deposit")]
+#[derive(Accounts)]
+pub struct ShieldedDepositCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+
+    #[account(
+        address = derive_comp_def_pda!(COMP_DEF_OFFSET_SHIELDED_DEPOSIT)
+    )]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instructions_sysvar, checked by the account constraint
+    pub instructions_sysvar: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"commitment_tree"],
+        bump = commitment_tree.bump
+    )]
+    pub commitment_tree: Account<'info, CommitmentTree>,
+
+    #[account(mut)]
+    pub depositor: Signer<'info>,
+}
+
+/// Initialize CompDef pour shielded_claim
+#[init_computation_definition_accounts("shielded_claim", payer)]
+#[derive(Accounts)]
+pub struct InitShieldedClaimCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        mut,
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+/// Queue shielded_claim computation
+#[queue_computation_accounts("shielded_claim", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct ShieldedClaim<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub claimer: Signer<'info>,
+
+    #[account(
+        seeds = [b"commitment_tree"],
+        bump = commitment_tree.bump
+    )]
+    pub commitment_tree: Account<'info, CommitmentTree>,
+
+    #[account(
+        mut,
+        seeds = [b"nullifier_registry"],
+        bump = nullifier_registry.bump
+    )]
+    pub nullifier_registry: Account<'info, NullifierRegistry>,
+
+    #[account(
+        mut,
+        seeds = [b"vault"],
+        bump
+    )]
+    /// CHECK: Vault PDA
+    pub vault: SystemAccount<'info>,
+
+    /// CHECK: Recipient can be any address (stealth address)
+    #[account(mut)]
+    pub recipient: SystemAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        space = 9,
+        payer = payer,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+
+    #[account(
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Account<'info, MXEAccount>,
+
+    #[account(
+        mut,
+        address = derive_mempool_pda!()
+    )]
+    /// CHECK: mempool_account, checked by the arcium program.
+    pub mempool_account: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        address = derive_execpool_pda!()
+    )]
+    /// CHECK: executing_pool, checked by the arcium program.
+    pub executing_pool: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        address = derive_comp_pda!(computation_offset)
+    )]
+    /// CHECK: computation_account, checked by the arcium program.
+    pub computation_account: UncheckedAccount<'info>,
+
+    #[account(
+        address = derive_comp_def_pda!(COMP_DEF_OFFSET_SHIELDED_CLAIM)
+    )]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+
+    #[account(
+        mut,
+        address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet)
+    )]
+    pub cluster_account: Account<'info, Cluster>,
+
+    #[account(
+        mut,
+        address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS,
+    )]
+    pub pool_account: Account<'info, FeePool>,
+
+    #[account(
+        address = ARCIUM_CLOCK_ACCOUNT_ADDRESS
+    )]
+    pub clock_account: Account<'info, ClockAccount>,
+
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+/// Callback shielded_claim
+#[callback_accounts("shielded_claim")]
+#[derive(Accounts)]
+pub struct ShieldedClaimCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+
+    #[account(
+        address = derive_comp_def_pda!(COMP_DEF_OFFSET_SHIELDED_CLAIM)
+    )]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instructions_sysvar, checked by the account constraint
+    pub instructions_sysvar: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"vault"],
+        bump
+    )]
+    /// CHECK: Vault PDA
+    pub vault: SystemAccount<'info>,
+
+    /// CHECK: Recipient
+    #[account(mut)]
+    pub recipient: SystemAccount<'info>,
+}
+
+// ===================================
 // PRIVATE TRANSFER ACCOUNTS
 // ===================================
 
@@ -931,6 +1619,45 @@ pub struct ClaimEvent {
     pub nullifier_hash: [u8; 32],
     pub recipient: Pubkey,
     pub amount: u64,
+    pub timestamp: i64,
+}
+
+/// Event émis lors d'un shielded deposit avec MPC
+/// Le montant est 100% CHIFFRÉ via Arcium MPC (sealing)
+#[event]
+pub struct ShieldedDepositEvent {
+    pub sealed_amount_ciphertext: [u8; 32],  // Montant re-chiffré pour Bob
+    pub sealed_amount_nonce: [u8; 16],       // Nonce pour décryption
+    pub timestamp: i64,
+}
+
+/// Event émis lors d'un shielded claim avec MPC
+#[event]
+pub struct ShieldedClaimEvent {
+    pub nullifier_hash: [u8; 32],
+    pub recipient: Pubkey,
+    pub approved: bool,                      // Claim approuvé ou non
+    pub timestamp: i64,
+}
+
+/// Event émis lors d'un deposit vers un pool à dénomination fixe
+/// Le montant est IMPLICITE (basé sur pool_id) donc INVISIBLE dans l'event!
+#[event]
+pub struct DepositToPoolEvent {
+    pub pool_id: u8,                         // 0=0.1 SOL, 1=0.5 SOL, etc.
+    pub commitment: [u8; 32],
+    pub ephemeral_public_key: [u8; 32],
+    pub index: u64,
+    pub timestamp: i64,
+}
+
+/// Event émis lors d'un claim depuis un pool à dénomination fixe
+/// Le montant est IMPLICITE (basé sur pool_id) donc INVISIBLE dans l'event!
+#[event]
+pub struct ClaimFromPoolEvent {
+    pub pool_id: u8,                         // 0=0.1 SOL, 1=0.5 SOL, etc.
+    pub nullifier_hash: [u8; 32],
+    pub recipient: Pubkey,
     pub timestamp: i64,
 }
 

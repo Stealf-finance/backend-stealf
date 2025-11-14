@@ -1,8 +1,9 @@
 use anchor_lang::prelude::*;
 
 /// Maximum number of commitments stored in the tree
-/// Limited to 256 to stay under 10KB account size limit for CPI reallocation
-pub const MAX_COMMITMENTS: usize = 256;
+/// Reduced to 32 to avoid stack overflow (256 * 32 bytes = 8KB was too much)
+/// For production: use multiple trees or zero-copy deserialization
+pub const MAX_COMMITMENTS: usize = 32;
 
 /// A cryptographic commitment representing a deposit in the shielded pool
 /// Following Umbra's design: C = Poseidon(V, I, Inner_Hash, pk_sol, amount, timestamp, ...)
