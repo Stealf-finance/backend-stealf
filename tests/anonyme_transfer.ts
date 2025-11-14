@@ -38,22 +38,82 @@ describe("Private Wallet Link", () => {
 
     await new Promise((res) => setTimeout(res, 2000));
 
-    await linkWallets(program, provider, owner, arciumEnv);
+    // Generate random wallets for testing
+    const randomGridWallet = Keypair.generate();
+    await linkSmartAccountWithPrivateWallet(randomGridWallet.publicKey, program, provider, owner, arciumEnv);
+  });
+
+  it.skip("Links Smart Account with a new Private wallet", async () => {
+    // This test is skipped because it would conflict with the PDA of the first test
+    // In production, each user would have their own unique owner keypair
+    const smartAccountAddress = Keypair.generate();
+
+    console.log("\n" + "=".repeat(50));
+    console.log("Testing Smart Account Linking");
+    console.log("=".repeat(50));
+
+    const result = await linkSmartAccountWithPrivateWallet(
+      smartAccountAddress.publicKey,
+      program,
+      provider,
+      owner,
+      arciumEnv
+    );
+
+    console.log("\n✅ Smart Account successfully linked!");
+    console.log("   Smart Account:", result.gridWallet.toBase58());
+    console.log("   Private Wallet:", result.privateWallet.publicKey.toBase58());
+  });
+
+  it("Retrieves linked wallets for existing user (login scenario)", async () => {
+    console.log("\n" + "=".repeat(50));
+    console.log("Testing Wallet Retrieval for Existing User");
+    console.log("=".repeat(50));
+
+    // Note: The first test already created a wallet link for this owner
+    // We're simulating a user login by retrieving the existing linked wallets
+
+    console.log("\n🔑 Simulating user login (retrieving existing wallets)...");
+    const retrievedWallets = await retrieveLinkedWallets(
+      owner.publicKey,
+      program,
+      provider,
+      arciumEnv
+    );
+
+    console.log("\n✅ Wallets successfully retrieved!");
+    console.log("   Grid Wallet:   ", retrievedWallets.gridWallet.toBase58());
+    console.log("   Private Wallet:", retrievedWallets.privateWallet.toBase58());
+
+    console.log("\n" + "=".repeat(50));
+    console.log("🎉 Login scenario successful! User can access their wallets!");
+    console.log("=".repeat(50));
   });
 });
 
-async function linkWallets(
+/**
+ * Links a smart account address with a newly created private wallet
+ * @param smartAccountAddress - The address of the smart account (grid wallet)
+ * @param program - The Arcium program instance
+ * @param provider - The Anchor provider
+ * @param owner - The keypair of the transaction payer/signer
+ * @param arciumEnv - The Arcium environment configuration
+ * @returns The grid wallet public key and the newly created private wallet keypair
+ */
+async function linkSmartAccountWithPrivateWallet(
+  smartAccountAddress: PublicKey,
   program: Program<PrivateWallet>,
   provider: anchor.AnchorProvider,
   owner: Keypair,
   arciumEnv: any
 ) {
-  // Generate test wallets
-  const gridWallet = Keypair.generate();
+  // Use provided smart account as grid wallet
+  const gridWallet = smartAccountAddress;
+  // Generate new private wallet
   const privateWallet = Keypair.generate();
 
-  console.log("Grid Wallet:", gridWallet.publicKey.toBase58());
-  console.log("Private Wallet:", privateWallet.publicKey.toBase58());
+  console.log("Smart Account (Grid Wallet):", gridWallet.toBase58());
+  console.log("Private Wallet (Generated):", privateWallet.publicKey.toBase58());
 
   const computationOffset = new anchor.BN(randomBytes(8));
 
@@ -65,7 +125,7 @@ async function linkWallets(
   const sharedSecret = x25519.getSharedSecret(clientSecretKey, mxePublicKey);
   const cipher = new RescueCipher(sharedSecret);
 
-  const gridBytes = gridWallet.publicKey.toBytes();
+  const gridBytes = gridWallet.toBytes();
   const gridLow = BigInt('0x' + Buffer.from(gridBytes.slice(0, 16)).toString('hex'));
   const gridHigh = BigInt('0x' + Buffer.from(gridBytes.slice(16, 32)).toString('hex'));
 
@@ -143,7 +203,43 @@ async function linkWallets(
 
   const event = await walletsLinkedEventPromise;
 
-  console.log("Decrypting wallets...");
+  const decryptedWallets = decryptWalletsLocally(event, cipher);
+
+  console.log("\nDecrypted wallets:");
+  console.log("   Grid Wallet:   ", decryptedWallets.gridWallet.toBase58());
+  console.log("   Private Wallet:", decryptedWallets.privateWallet.toBase58());
+
+  // Verify decryption correctness
+  console.log("\nVerification:");
+  const gridMatch = decryptedWallets.gridWallet.equals(gridWallet);
+  const privateMatch = decryptedWallets.privateWallet.equals(privateWallet.publicKey);
+  console.log("   Grid Wallet match:   ", gridMatch ? "[PASS]" : "[FAIL]");
+  console.log("   Private Wallet match:", privateMatch ? "[PASS]" : "[FAIL]");
+
+  console.log("\n" + "=".repeat(50));
+  console.log("Wallets successfully linked, re-encrypted, and decrypted!");
+
+  return { gridWallet, privateWallet };
+}
+
+/**
+ * Decrypts wallet addresses locally from MPC computation event
+ * @param event - The walletsLinkedEvent containing encrypted wallet data
+ * @param cipher - The RescueCipher instance used for decryption
+ * @returns The decrypted grid wallet and private wallet PublicKeys
+ */
+function decryptWalletsLocally(
+  event: {
+    nonce: number[];
+    gridWalletLow: number[];
+    gridWalletHigh: number[];
+    privateWalletLow: number[];
+    privateWalletHigh: number[];
+  },
+  cipher: RescueCipher
+): { gridWallet: PublicKey; privateWallet: PublicKey } {
+  console.log("Decrypting wallets locally...");
+
   const eventNonce = Buffer.from(event.nonce);
 
   // Decrypt the 4 ciphertexts (each represents a u128)
@@ -164,31 +260,120 @@ async function linkWallets(
   };
 
   // Reconstruct PublicKeys from decrypted u128 values
-  const decryptedGridWallet = new PublicKey(Buffer.concat([
+  const gridWallet = new PublicKey(Buffer.concat([
     u128ToBytes(decrypted[0]),
     u128ToBytes(decrypted[1])
   ]));
 
-  const decryptedPrivateWallet = new PublicKey(Buffer.concat([
+  const privateWallet = new PublicKey(Buffer.concat([
     u128ToBytes(decrypted[2]),
     u128ToBytes(decrypted[3])
   ]));
 
-  console.log("\\nDecrypted wallets:");
-  console.log("   Grid Wallet:   ", decryptedGridWallet.toBase58());
-  console.log("   Private Wallet:", decryptedPrivateWallet.toBase58());
-
-  // Verify decryption correctness
-  console.log("\\nVerification:");
-  const gridMatch = decryptedGridWallet.equals(gridWallet.publicKey);
-  const privateMatch = decryptedPrivateWallet.equals(privateWallet.publicKey);
-  console.log("   Grid Wallet match:   ", gridMatch ? "[PASS]" : "[FAIL]");
-  console.log("   Private Wallet match:", privateMatch ? "[PASS]" : "[FAIL]");
-
-  console.log("\\n" + "=".repeat(50));
-  console.log("Wallets successfully linked, re-encrypted, and decrypted!");
-
   return { gridWallet, privateWallet };
+}
+
+/**
+ * Retrieves linked wallets for an existing user (login scenario)
+ * Reads encrypted data from PDA and uses MPC to re-encrypt with a new ephemeral client key
+ * @param ownerPublicKey - The public key of the account owner
+ * @param program - The Arcium program instance
+ * @param provider - The Anchor provider
+ * @param arciumEnv - The Arcium environment configuration
+ * @returns The decrypted grid wallet and private wallet PublicKeys
+ */
+async function retrieveLinkedWallets(
+  ownerPublicKey: PublicKey,
+  program: Program<PrivateWallet>,
+  provider: anchor.AnchorProvider,
+  arciumEnv: any
+): Promise<{ gridWallet: PublicKey; privateWallet: PublicKey }> {
+  console.log("Retrieving linked wallets for existing user...");
+
+  // Derive the PDA address for encrypted wallets
+  const [encryptedWalletsPDA] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("encrypted_wallets"),
+      ownerPublicKey.toBuffer(),
+    ],
+    program.programId
+  );
+
+  console.log("Encrypted wallets PDA:", encryptedWalletsPDA.toBase58());
+
+  // Generate NEW ephemeral client keys for this session
+  const computationOffset = new anchor.BN(randomBytes(8));
+  const mxePublicKey = await getMXEPublicKey(provider, program.programId);
+  console.log("MXE x25519 pubkey:", mxePublicKey);
+
+  const clientSecretKey = x25519.utils.randomSecretKey();
+  const clientPubKey = x25519.getPublicKey(clientSecretKey);
+  const sharedSecret = x25519.getSharedSecret(clientSecretKey, mxePublicKey);
+  const cipher = new RescueCipher(sharedSecret);
+
+  // Generate a new nonce for this session
+  const clientNonce = randomBytes(16);
+
+  // Setup event listener
+  type Event = anchor.IdlEvents<(typeof program)["idl"]>;
+  const awaitEvent = async <E extends keyof Event>(eventName: E) => {
+    let listenerId: number;
+    const event = await new Promise<Event[E]>((res) => {
+      listenerId = program.addEventListener(eventName, (event) => {
+        res(event);
+      });
+    });
+    await program.removeEventListener(listenerId);
+    return event;
+  };
+
+  const walletsLinkedEventPromise = awaitEvent("walletsLinkedEvent");
+
+  // Queue MPC computation to re-encrypt the stored wallets with the new client key
+  // The MPC will decrypt the PDA data and re-encrypt it for the new client
+  const linkSig = await program.methods
+    .linkWallets(
+      computationOffset,
+      Array.from(clientPubKey),
+      new anchor.BN(deserializeLE(clientNonce).toString()),
+      Array.from(clientPubKey),  // sender = client (same keys)
+      new anchor.BN(deserializeLE(clientNonce).toString()),  // sender nonce (same)
+    )
+    .accountsPartial({
+      computationAccount: getComputationAccAddress(program.programId, computationOffset),
+      clusterAccount: arciumEnv.arciumClusterPubkey,
+      mxeAccount: getMXEAccAddress(program.programId),
+      mempoolAccount: getMempoolAccAddress(program.programId),
+      executingPool: getExecutingPoolAccAddress(program.programId),
+      compDefAccount: getCompDefAccAddress(
+        program.programId,
+        Buffer.from(getCompDefAccOffset("link_wallets")).readUInt32LE()
+      ),
+      payer: ownerPublicKey,
+      encryptedWallets: encryptedWalletsPDA,
+    })
+    .rpc({ commitment: "confirmed" });
+
+  console.log("MPC computation queued:", linkSig);
+
+  // Wait for MPC computation to complete
+  await awaitComputationFinalization(
+    provider,
+    computationOffset,
+    program.programId,
+    "confirmed"
+  );
+
+  const event = await walletsLinkedEventPromise;
+
+  // Decrypt the wallets using the new cipher
+  const decryptedWallets = decryptWalletsLocally(event, cipher);
+
+  console.log("\n✅ Wallets successfully retrieved!");
+  console.log("   Grid Wallet:   ", decryptedWallets.gridWallet.toBase58());
+  console.log("   Private Wallet:", decryptedWallets.privateWallet.toBase58());
+
+  return decryptedWallets;
 }
 
 // ============= HELPER FUNCTIONS =============

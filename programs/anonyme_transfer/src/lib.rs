@@ -162,6 +162,10 @@ pub struct LinkWallets<'info> {
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
 
+    #[account(
+        seeds = [b"encrypted_wallets", payer.key().as_ref()],
+        bump,
+    )]
     pub encrypted_wallets: Account<'info, EncryptedWallets>,
 }
 
@@ -222,8 +226,4 @@ pub enum ErrorCode {
     AbortedComputation,
     #[msg("Cluster not set")]
     ClusterNotSet,
-    #[msg("Unauthorized")]
-    Unauthorized,
-    #[msg("Invalid ciphertext count")]
-    InvalidCiphertextCount,
 }
