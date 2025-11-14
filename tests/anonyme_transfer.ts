@@ -15,6 +15,7 @@ import {
   getCompDefAccAddress,
   getExecutingPoolAccAddress,
   getComputationAccAddress,
+  getClusterAccAddress,
   deserializeLE,
   RescueCipher,
   x25519,
@@ -23,13 +24,51 @@ import {
 import * as fs from "fs";
 import * as os from "os";
 
+// Cluster configuration
+// For localnet testing: null (uses ARCIUM_CLUSTER_PUBKEY from env)
+// For devnet/testnet: specific cluster offset
+const CLUSTER_OFFSET = 768109697;
+const PROGRAM = "A26JcC1bfDZ1wV5Vkdo4rrwDcUzorjT55a6RGp7bAfzx";
+
+function getClusterAccount(): PublicKey {
+  if (CLUSTER_OFFSET !== null) {
+    return getClusterAccAddress(CLUSTER_OFFSET);
+  } else {
+    return getArciumEnv().arciumClusterPubkey;
+  }
+}
+
+
+
+if (useDevnet) {
+  // Devnet configuration
+  const connection = new anchor.web3.Connection(
+    "https://devnet.helius-rpc.com/?api-key=43e43858-1784-4f9f-8a2d-fd791cd44d53", // or your preferred RPC
+    "confirmed"
+  );
+  const wallet = new anchor.Wallet(owner);
+  const provider = new anchor.AnchorProvider(connection, wallet, {
+    commitment: "confirmed",
+  });
+  const program = new anchor.Program<PROGRAM>(IDL as anchor.Idl, provider);
+  const clusterAccount = getClusterAccAddress(CLUSTER_OFFSET); // Use your cluster offset
+} else {
+  // Local configuration
+  anchor.setProvider(anchor.AnchorProvider.env());
+  const provider = anchor.getProvider() as anchor.AnchorProvider;
+  const program = anchor.workspace.YourProgram as Program<PROGRAM>;
+  const arciumEnv = getArciumEnv();
+  const clusterAccount = arciumEnv.arciumClusterPubkey;
+}
+
 describe("Private Wallet Link", () => {
   const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
 
   anchor.setProvider(anchor.AnchorProvider.env());
   const program = anchor.workspace.PrivateWallet as Program<PrivateWallet>;
   const provider = anchor.getProvider() as anchor.AnchorProvider;
-  const arciumEnv = getArciumEnv();
+  const clusterAccount = getClusterAccount();
+
 
   it("Links Grid and Private wallets", async () => {
     console.log("Initializing computation definition...");
@@ -40,7 +79,7 @@ describe("Private Wallet Link", () => {
 
     // Generate random wallets for testing
     const randomGridWallet = Keypair.generate();
-    await linkSmartAccountWithPrivateWallet(randomGridWallet.publicKey, program, provider, owner, arciumEnv);
+    await linkSmartAccountWithPrivateWallet(randomGridWallet.publicKey, program, provider, owner, clusterAccount);
   });
 
   it.skip("Links Smart Account with a new Private wallet", async () => {
@@ -57,7 +96,7 @@ describe("Private Wallet Link", () => {
       program,
       provider,
       owner,
-      arciumEnv
+      clusterAccount
     );
 
     console.log("\n✅ Smart Account successfully linked!");
@@ -78,7 +117,7 @@ describe("Private Wallet Link", () => {
       owner.publicKey,
       program,
       provider,
-      arciumEnv
+      clusterAccount
     );
 
     console.log("\n✅ Wallets successfully retrieved!");
@@ -168,6 +207,9 @@ async function linkSmartAccountWithPrivateWallet(
 
   const walletsLinkedEventPromise = awaitEvent("walletsLinkedEvent");
 
+  // Use cluster offset for deriving the cluster account address
+  const clusterAccount = getClusterAccAddress(768109697);
+
   const linkSig = await program.methods
     .linkWallets(
       computationOffset,
@@ -178,7 +220,7 @@ async function linkSmartAccountWithPrivateWallet(
     )
     .accountsPartial({
       computationAccount: getComputationAccAddress(program.programId, computationOffset),
-      clusterAccount: arciumEnv.arciumClusterPubkey,
+      clusterAccount: clusterAccount,
       mxeAccount: getMXEAccAddress(program.programId),
       mempoolAccount: getMempoolAccAddress(program.programId),
       executingPool: getExecutingPoolAccAddress(program.programId),
@@ -328,6 +370,7 @@ async function retrieveLinkedWallets(
   };
 
   const walletsLinkedEventPromise = awaitEvent("walletsLinkedEvent");
+  const clusterAccount = getClusterAccAddress(768109697);
 
   // Queue MPC computation to re-encrypt the stored wallets with the new client key
   // The MPC will decrypt the PDA data and re-encrypt it for the new client
@@ -341,7 +384,7 @@ async function retrieveLinkedWallets(
     )
     .accountsPartial({
       computationAccount: getComputationAccAddress(program.programId, computationOffset),
-      clusterAccount: arciumEnv.arciumClusterPubkey,
+      clusterAccount: clusterAccount,
       mxeAccount: getMXEAccAddress(program.programId),
       mempoolAccount: getMempoolAccAddress(program.programId),
       executingPool: getExecutingPoolAccAddress(program.programId),
