@@ -1,0 +1,37 @@
+[package]
+name = "private"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "private"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "arcium-anchor/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+arcium-anchor = "0.4.0"
+arcium-client = { version = "0.4.0", default-features = false }
+arcium-macros = "0.4.0"
+
+# Cryptography dependencies for Umbra-style shielded pool
+light-poseidon = "0.2.0"
+sha2 = "0.10"
+bytemuck = "1.14"
+bs58 = "0.5"
+chacha20 = { version = "0.9", default-features = false }
+curve25519-dalek = { version = "4.1", default-features = false, features = ["alloc"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

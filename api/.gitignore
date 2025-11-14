@@ -9,7 +9,6 @@ node_modules/
 # Build output
 dist/
 build/
-target/
 
 # Logs
 logs/
@@ -30,10 +29,3 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
-
-# Documentation - ignore all markdown files
-*.md
-**/*.md
-
-# Examples folder
-examples/
