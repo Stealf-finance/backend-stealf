@@ -21,7 +21,7 @@ import * as os from "os";
 
 // Configuration
 const PROGRAM_ID = new PublicKey("CJGGJceyiZqWszErY1mmkHzbVwsgeYdDe32hHZrfbwmm");
-const CLUSTER_OFFSET = 768109697;
+const CLUSTER_OFFSET = 1100229901;
 const RPC_URL = "https://devnet.helius-rpc.com/?api-key=43e43858-1784-4f9f-8a2d-fd791cd44d53";
 
 function readKpJson(path: string): Keypair {
@@ -144,7 +144,7 @@ async function testWalletLinking() {
   console.log("Step 5: Queueing MPC re-encryption computation");
   console.log("=".repeat(70));
 
-  const computationOffset = new anchor.BN(randomBytes(8));
+  const computationOffset = new anchor.BN(randomBytes(8), "hex");
 
   console.log("  Computation offset:", computationOffset.toString());
 

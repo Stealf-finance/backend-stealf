@@ -6,7 +6,7 @@ import { BN } from "@coral-xyz/anchor";
  * Source: Arcium v0.4.0 documentation
  */
 export const ARCIUM_PROGRAM_ID_DEVNET = new PublicKey(
-  "BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6"
+  "CJGGJceyiZqWszErY1mmkHzbVwsgeYdDe32hHZrfbwmm"
 );
 
 /**

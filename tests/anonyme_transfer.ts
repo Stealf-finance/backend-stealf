@@ -25,8 +25,8 @@ import {
 import * as fs from "fs";
 import * as os from "os";
 
-const CLUSTER_OFFSET = 768109697;
-const PROGRAM = "A26JcC1bfDZ1wV5Vkdo4rrwDcUzorjT55a6RGp7bAfzx";
+const CLUSTER_OFFSET = 1100229901;
+const PROGRAM = "CJGGJceyiZqWszErY1mmkHzbVwsgeYdDe32hHZrfbwmm";
 
 describe("Private Wallet Link", () => {
   const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
@@ -147,7 +147,7 @@ async function linkSmartAccountWithPrivateWallet(
   console.log("Smart Account (Grid Wallet):", gridWallet.toBase58());
   console.log("Private Wallet (Generated):", privateWallet.publicKey.toBase58());
 
-  const computationOffset = new anchor.BN(randomBytes(8));
+  const computationOffset = new anchor.BN(randomBytes(8), "hex");
 
   const mxePublicKey = await getMXEPublicKey(provider, program.programId);
   console.log("MXE x25519 pubkey:", mxePublicKey);
@@ -334,7 +334,7 @@ async function retrieveLinkedWallets(
   console.log("Encrypted wallets PDA:", encryptedWalletsPDA.toBase58());
 
   // Generate NEW ephemeral client keys for this session
-  const computationOffset = new anchor.BN(randomBytes(8));
+  const computationOffset = new anchor.BN(randomBytes(8), "hex");
   const mxePublicKey = await getMXEPublicKey(provider, program.programId);
   console.log("MXE x25519 pubkey:", mxePublicKey);
 
