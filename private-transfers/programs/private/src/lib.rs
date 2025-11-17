@@ -41,7 +41,7 @@ const COMP_DEF_OFFSET_PRIVATE_TRANSFER: u32 = comp_def_offset("private_transfer"
 const COMP_DEF_OFFSET_SHIELDED_DEPOSIT: u32 = comp_def_offset("shielded_deposit");
 const COMP_DEF_OFFSET_SHIELDED_CLAIM: u32 = comp_def_offset("shielded_claim");
 
-declare_id!("FZpAL2ogH95Fh8N3Cs3wwXhR3VysR922WZYjTTPo17ka");
+declare_id!("BCiGf5k8k3uGiSDqHtJDjLR54oL9RVJQ3e7h6qQKwKHU");
 
 #[arcium_program]
 pub mod private {

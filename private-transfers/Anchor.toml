@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-private = "FZpAL2ogH95Fh8N3Cs3wwXhR3VysR922WZYjTTPo17ka"
+private = "BCiGf5k8k3uGiSDqHtJDjLR54oL9RVJQ3e7h6qQKwKHU"
 
 [registry]
 url = "https://api.apr.dev"
@@ -17,7 +17,7 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/private.devnet.ts\""
+test-encrypted = "npx ts-node scripts/test-encrypted-balances.ts"
 test-flexible = "npx ts-node scripts/test-simple-deposit-claim.ts"
 test-mpc = "npx ts-node scripts/test-shielded-mpc.ts"
 test-pools = "npx ts-node scripts/test-denomination-pools.ts"
-test-encrypted = "npx ts-node scripts/test-encrypted-balances.ts"
