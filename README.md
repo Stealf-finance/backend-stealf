@@ -3,7 +3,7 @@
 
 ---
 
-At the moment, we are in the development phase to test the programs. They must be compiled separately and then tested with the files in the /tests folder.
+At the moment, we are in the development phase to test the programs they must be compiled separately and then tested with the files in the /tests folder.
 
 ---
 
