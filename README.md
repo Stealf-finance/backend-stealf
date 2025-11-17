@@ -175,10 +175,18 @@ This project uses **Arcium's Multi-Party Computation (MPC)** framework to perfor
 5. **Results** are returned encrypted and can only be decrypted by the authorized client
 
 **Where Arcium is used:**
-- `private-link/encrypted-ixs/src/lib.rs` - Wallet linking MPC circuit (`link_wallets` instruction)
-- `private-transfers/encrypted-ixs/src/lib.rs` - Transfer validation & shielded transactions MPC circuits
-- `sdk/src/utils/encryption.ts` - Client-side encryption using `@arcium-hq/client`
+
+**MPC Circuits (using `arcis-imports` v0.4.0):**
+- `private-link/encrypted-ixs/src/lib.rs` - Wallet linking circuit
+- `private-transfers/encrypted-ixs/src/lib.rs` - 4 transfer circuits (validate, private_transfer, shielded_deposit, shielded_claim)
+
+**Solana Programs (using `arcium_anchor`):**
+- `private-link/programs/anonyme_transfer/src/lib.rs` - #[arcium_program], queue_computation(), #[arcium_callback]
+- `private-transfers/programs/private/src/lib.rs` - 4 MPC computation queues with arcium_anchor integration
+
+**SDK (TypeScript):**
 - `sdk/src/client/WalletLinkClient.ts` - MPC computation queueing and finalization
+- `sdk/src/utils/encryption.ts` - Client-side encryption using `@arcium-hq/client`
 
 **Key Arcium commands:**
 ```bash
