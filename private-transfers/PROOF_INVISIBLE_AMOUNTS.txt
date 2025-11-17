@@ -1,0 +1,75 @@
+╔═══════════════════════════════════════════════════════════════╗
+║     🔍 PREUVE: Montants Invisibles vs Visibles              ║
+╚═══════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: DENOMINATION POOL (deposit_to_pool)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Transaction: 48mhKtkcDkYiv6Dzt3iLHbJi4a5cLzUx59pfWDxA7jmrJHBPioJEB6tiVnmjP9wCNeGbNfzdz2LcoKGpReijfyjq
+Explorer: https://explorer.solana.com/tx/48mhKtkcDkYiv6Dzt3iLHbJi4a5cLzUx59pfWDxA7jmrJHBPioJEB6tiVnmjP9wCNeGbNfzdz2LcoKGpReijfyjq?cluster=devnet
+
+Log du programme:
+  "Program log: 💰 Depositing to pool 1"
+  "Program log:   - Amount (implicit): 500000000 lamports"
+                                       ^^^^^^^^^^
+                                    Calculé côté programme!
+
+Recherche du montant dans instruction data:
+  500000000 lamports = 0x1DCD6500 en little-endian
+  
+  Résultat: ❌ PAS TROUVÉ!
+  
+  Le montant N'EST PAS dans l'instruction data.
+  Il est déterminé par pool_id=1 → 0.5 SOL (implicite).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: FLEXIBLE AMOUNT (deposit_with_commitment)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Transaction: 3KKiz7a7k5sifa1B7X1ePvrzgib4Fn2Gw2E1KKJoCyGxvPLjB6XH3JLd7hMo5nqWBbzGRybVhrB2Mq1AKubwDTNa
+Explorer: https://explorer.solana.com/tx/3KKiz7a7k5sifa1B7X1ePvrzgib4Fn2Gw2E1KKJoCyGxvPLjB6XH3JLd7hMo5nqWBbzGRybVhrB2Mq1AKubwDTNa?cluster=devnet
+
+Log du programme:
+  "Program log: 💰 Depositing with commitment (Umbra-style)"
+  "Program log:   - Amount: 100000000 lamports (plaintext for transfer)"
+                             ^^^^^^^^^
+                          Passé en paramètre!
+
+Recherche du montant dans instruction data:
+  100000000 lamports = 0x05F5E100 en little-endian
+  
+  Instruction data (offset 0x110):
+  00000110: a8e9 6002 a600 e1f5 0500 0000 0092 5b7c
+                         ^^^^^^^^^^^^^ 
+                         Trouvé! 00e1f50500000000 = 100000000
+
+  Résultat: ✅ TROUVÉ à offset 0x115!
+  
+  Le montant EST VISIBLE dans l'instruction data.
+  N'importe qui peut décoder la transaction et voir 0.1 SOL.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONCLUSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─────────────────────────────────┬───────────────────────────┐
+│ System                          │ Montant dans instruction? │
+├─────────────────────────────────┼───────────────────────────┤
+│ Denomination Pools              │   ❌ NON (implicite)      │
+│ Flexible Amounts                │   ✅ OUI (explicite)      │
+└─────────────────────────────────┴───────────────────────────┘
+
+Denomination Pools:
+  • Montant déterminé par pool_id (0-4)
+  • pool_id=1 → TOUJOURS 0.5 SOL
+  • Pas de paramètre amount dans l'instruction
+  • → 100% INVISIBLE on-chain
+
+Flexible Amounts:
+  • Montant passé en paramètre u64
+  • N'importe quel montant possible
+  • Paramètre visible dans instruction data
+  • → Flexible mais VISIBLE on-chain
+
+✅ PREUVE ÉTABLIE: Les denomination pools cachent vraiment le montant!

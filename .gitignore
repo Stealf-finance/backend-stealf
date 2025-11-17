@@ -27,6 +27,10 @@ private-link/build/
 private-link/target/
 private-link/test-ledger/
 
+private-transfers/build/
+private-transfers/target/
+private-transfers/test-ledger/
+
 # SDK
 sdk/dist/
 sdk/node_modules/
