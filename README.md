@@ -76,6 +76,8 @@ backend-stealf/
 │   ├── VERIFICATION_CHECKLIST.md
 │   └── FRONTEND_INTEGRATION.md
 │
+├── Arcium.toml                # Arcium MPC configuration (per module)
+│
 ├── .gitignore
 ├── README.md                  # This file
 └── package.json              # Root package.json
@@ -159,7 +161,31 @@ Comprehensive private transaction system combining three major privacy protocols
 - Rust >= 1.70.0
 - Solana CLI >= 1.18.0
 - Anchor CLI >= 0.32.0
-- Arcium CLI (for MPC circuits)
+- **Arcium CLI** (for MPC circuits)
+
+### About Arcium (formerly Arcis)
+
+This project uses **Arcium's Multi-Party Computation (MPC)** framework to perform confidential computations on encrypted data. The MPC circuits are defined in the `encrypted-ixs/` directories using Rust with the `arcis-imports` crate (v0.4.0).
+
+**How Arcium works in this project:**
+1. **MPC Circuits** (`encrypted-ixs/src/lib.rs`) define confidential computations using `#[encrypted]` and `#[instruction]` macros
+2. **Arcium CLI** compiles these circuits into deployable MPC programs
+3. **Client encryption** uses x25519 + RescueCipher to encrypt inputs before sending to MPC nodes
+4. **MPC execution** happens on Arcium's Cerberus backend (configured in `Arcium.toml`)
+5. **Results** are returned encrypted and can only be decrypted by the authorized client
+
+**Where Arcium is used:**
+- `private-link/encrypted-ixs/src/lib.rs` - Wallet linking MPC circuit (`link_wallets` instruction)
+- `private-transfers/encrypted-ixs/src/lib.rs` - Transfer validation & shielded transactions MPC circuits
+- `sdk/src/utils/encryption.ts` - Client-side encryption using `@arcium-hq/client`
+- `sdk/src/client/WalletLinkClient.ts` - MPC computation queueing and finalization
+
+**Key Arcium commands:**
+```bash
+arcium build              # Compile MPC circuits
+arcium deploy --devnet    # Deploy circuits to devnet
+arcium test               # Run MPC circuit tests
+```
 
 ### Installation
 
