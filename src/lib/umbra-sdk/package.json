@@ -1,0 +1,59 @@
+{
+  "name": "client",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^20.11.0",
+    "@types/snarkjs": "^0.7.9",
+    "client": "link:@types/arcium-hq/client",
+    "curves": "link:@types/noble/curves",
+    "hashes": "link:@types/@noble/hashes",
+    "prettier": "^3.2.5",
+    "tsup": "^8.0.1",
+    "typedoc": "^0.28.14",
+    "typedoc-plugin-markdown": "^4.9.0",
+    "typedoc-to-mdx": "^0.2.0",
+    "typescript": "^5.3.3",
+    "undici-types": "^7.16.0"
+  },
+  "dependencies": {
+    "@arcium-hq/client": "^0.4.0",
+    "@coral-xyz/anchor": "^0.32.1",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@solana/web3.js": "^1.98.4",
+    "bn.js": "^5.2.2",
+    "eventemitter": "^0.3.3",
+    "eventemitter3": "^5.0.1",
+    "snarkjs": "^0.7.4",
+    "web3.js": "link:@types/@solana/web3.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,scss,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,scss,md,yml,yaml}\"",
+    "lint:format": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,scss,md,yml,yaml}\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

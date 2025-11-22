@@ -1,0 +1,32 @@
+[workspace]
+members = ["encrypted-ixs", "programs/private-transfer"]
+
+[toolchain]
+solana_version = "1.18.0"
+
+# Arcium configuration for private transfer program
+[programs.devnet]
+arcium_private_transfer = "9Y9mYGUup4jXo1cw6VBUGme21GH7XYAriLku57EQ7wxQ"
+
+[registry]
+url = "https://api.devnet.solana.com"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+# Scripts
+[scripts]
+test = "anchor test"
+build = "arcium build"
+deploy = "arcium deploy --devnet"
+
+# Encrypted instructions configuration
+[encrypted_ixs]
+path = "encrypted-ixs"
+package_name = "arcium-private-transfer-circuits"
+
+# Arcium cluster configuration
+[arcium]
+# Will be set during deployment
+cluster_offset = 768109697  # Use same cluster as Umbra SDK

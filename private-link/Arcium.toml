@@ -1,9 +1,0 @@
-[devnet]
-
-[toolchain]
-anchor_version = "0.32.1"
-cluster = "devnet"
-
-[network]
-cluster = "devnet"
-rpc_url = "https://api.devnet.solana.com"

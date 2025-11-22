@@ -1,0 +1,23 @@
+[toolchain]
+anchor_version = "0.32.1"
+solana_version = "1.18.0"
+
+[features]
+resolution = true
+skip-lint = true
+
+[programs.devnet]
+arcium_private_transfer = "G3dDdXck7X3f7o3ytqZcVigcP4aJAQBDto6XC1MQoFfp"
+
+[programs.localnet]
+arcium_private_transfer = "9W1vpuyuvb7k6kj7qH2pysnL6haHsX97KxYBmuXfWgAt"
+
+[registry]
+url = "https://api.devnet.solana.com"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
