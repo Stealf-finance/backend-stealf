@@ -7,7 +7,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-anonyme_transfer = "CJGGJceyiZqWszErY1mmkHzbVwsgeYdDe32hHZrfbwmm"
+anonyme_transfer = "A26JcC1bfDZ1wV5Vkdo4rrwDcUzorjT55a6RGp7bAfzx"
 
 [registry]
 url = "https://api.apr.dev"
