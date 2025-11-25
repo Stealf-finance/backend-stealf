@@ -5,10 +5,10 @@ import {
   Transaction,
   TransactionInstruction,
   SystemProgram,
+  LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
-import { AnchorProvider } from '@coral-xyz/anchor';
 import BN from 'bn.js';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { x25519 } from '@noble/curves/ed25519.js';
 import {
   RescueCipher,
@@ -17,6 +17,7 @@ import {
   getMempoolAccAddress,
   getExecutingPoolAccAddress,
   getClusterAccAddress,
+  getCompDefAccAddress,
 } from '@arcium-hq/client';
 import { ArciumTransfer } from '../../models/arcium-transfer.model.js';
 import { ARCIUM_CONFIG } from '../../config/arcium.config.js';
@@ -33,105 +34,121 @@ import { ARCIUM_CONFIG } from '../../config/arcium.config.js';
  * - Only sender and recipient can decrypt the amount
  * - On-chain data shows only encrypted values
  */
+
+// Program ID from IDL
+const PROGRAM_ID = new PublicKey(ARCIUM_CONFIG.PROGRAM_ID);
+const ARCIUM_PROGRAM_ID = new PublicKey(ARCIUM_CONFIG.ARCIUM_PROGRAM_ID);
+const POOL_ACCOUNT = new PublicKey(ARCIUM_CONFIG.POOL_ACCOUNT);
+const CLOCK_ACCOUNT = new PublicKey(ARCIUM_CONFIG.CLOCK_ACCOUNT);
+
+// Discriminators from IDL
+const ENCRYPTED_TRANSFER_DISCRIMINATOR = Buffer.from(ARCIUM_CONFIG.DISCRIMINATORS.ENCRYPTED_TRANSFER);
+const INIT_COMP_DEF_DISCRIMINATOR = Buffer.from(ARCIUM_CONFIG.DISCRIMINATORS.INIT_COMP_DEF);
+
+// PDA seeds from IDL
+const TRANSFER_SEED = Buffer.from('transfer'); // [116, 114, 97, 110, 115, 102, 101, 114]
+const SIGNER_ACCOUNT_SEED = Buffer.from('SignerAccount'); // [83, 105, 103, 110, 101, 114, 65, 99, 99, 111, 117, 110, 116]
+
 class EncryptedTransferService {
   private connection: Connection | null = null;
-  private programId: PublicKey | null = null;
-  private provider: AnchorProvider | null = null;
   private mxePublicKey: Uint8Array | null = null;
+  private compDefAccount: PublicKey | null = null;
 
   /**
-   * Initialize the service with Solana connection and program
+   * Calculate comp_def_offset from instruction name (matches Rust comp_def_offset! macro)
+   * Uses first 4 bytes of sha256 hash as u32
    */
-  async initialize(connection: Connection, programId?: PublicKey): Promise<void> {
-    this.connection = connection;
-
-    // Create provider (using a dummy wallet for now)
-    const dummyWallet = {
-      publicKey: Keypair.generate().publicKey,
-      signTransaction: async (tx: any) => tx,
-      signAllTransactions: async (txs: any[]) => txs,
-    };
-
-    this.provider = new AnchorProvider(
-      connection,
-      dummyWallet as any,
-      { commitment: 'confirmed' }
-    );
-
-    // Store program ID (we'll build instructions manually to avoid IDL account type issues)
-    if (programId) {
-      this.programId = programId;
-      console.log(`✅ Arcium program ID set: ${programId.toBase58()}`);
-
-      // Check if CompDef is initialized
-      // Using the stealf_private program's private_transfer CompDef PDA
-      const compDefAccount = new PublicKey(ARCIUM_CONFIG.COMP_DEF_PRIVATE_TRANSFER);
-      const compDefInfo = await connection.getAccountInfo(compDefAccount);
-
-      if (!compDefInfo) {
-        console.log(`⚠️  Arcium CompDef not initialized!`);
-        console.log(`   Run this command to initialize it:`);
-        console.log(`   POST /api/arcium/init with your wallet keypair`);
-      } else {
-        console.log(`✅ Arcium CompDef initialized`);
-      }
-    } else {
-      console.log('⚠️  No program ID provided - encrypted transfers disabled');
-    }
-
-    // Get MXE public key from cluster
-    const mxeAddress = getMXEAccAddress(
-      programId || new PublicKey('11111111111111111111111111111111')
-    );
-
-    try {
-      // In production, fetch MXE public key from on-chain account
-      // For now, use a placeholder
-      this.mxePublicKey = ARCIUM_CONFIG.MXE_X25519_PUBLIC_KEY;
-      console.log('🔐 Arcium Encrypted Transfer Service initialized');
-    } catch (error) {
-      console.error('⚠️  MXE public key not available yet');
-      this.mxePublicKey = new Uint8Array(32); // Placeholder
-    }
+  private calculateCompDefOffset(instructionName: string): number {
+    const hash = createHash('sha256').update(instructionName).digest();
+    // Read first 4 bytes as little-endian u32
+    return hash.readUInt32LE(0);
   }
 
   /**
-   * Initialize Arcium MXE and CompDef (one-time setup)
+   * Initialize the service with Solana connection
    */
-  async initializeArcium(payerKeypair: Keypair): Promise<string> {
-    if (!this.connection || !this.programId) {
+  async initialize(connection: Connection): Promise<void> {
+    this.connection = connection;
+
+    console.log('🔐 Initializing Arcium Encrypted Transfer Service...');
+    console.log(`   Program ID: ${PROGRAM_ID.toBase58()}`);
+    console.log(`   Arcium Program: ${ARCIUM_PROGRAM_ID.toBase58()}`);
+    console.log(`   Cluster ID: ${ARCIUM_CONFIG.CLUSTER_ID}`);
+
+    // Get MXE account and fetch public key
+    const mxeAccount = getMXEAccAddress(PROGRAM_ID);
+    console.log(`   MXE Account: ${mxeAccount.toBase58()}`);
+
+    try {
+      const mxeInfo = await connection.getAccountInfo(mxeAccount);
+      if (mxeInfo) {
+        // MXE account exists, try to extract x25519 public key
+        // The x25519_pubkey is in utility_pubkeys field
+        // For now, use the configured key
+        this.mxePublicKey = ARCIUM_CONFIG.MXE_X25519_PUBLIC_KEY;
+        console.log(`   ✅ MXE Account found`);
+      } else {
+        console.log(`   ⚠️ MXE Account not initialized - run initializeCompDef first`);
+        this.mxePublicKey = ARCIUM_CONFIG.MXE_X25519_PUBLIC_KEY;
+      }
+    } catch (error) {
+      console.error(`   ⚠️ Could not fetch MXE account:`, error);
+      this.mxePublicKey = ARCIUM_CONFIG.MXE_X25519_PUBLIC_KEY;
+    }
+
+    // Get CompDef account using arcium-client helper
+    // comp_def_offset("encrypted_transfer") generates a unique ID based on the instruction name hash
+    try {
+      // Calculate comp_def_offset for "encrypted_transfer" - this matches the Rust macro
+      const compDefOffset = this.calculateCompDefOffset('encrypted_transfer');
+      this.compDefAccount = getCompDefAccAddress(PROGRAM_ID, compDefOffset);
+      console.log(`   CompDef Account: ${this.compDefAccount.toBase58()}`);
+
+      const compDefInfo = await connection.getAccountInfo(this.compDefAccount);
+      if (compDefInfo) {
+        console.log(`   ✅ CompDef initialized`);
+      } else {
+        console.log(`   ⚠️ CompDef not initialized - run initializeCompDef first`);
+      }
+    } catch (error) {
+      console.error(`   ⚠️ Could not get CompDef address:`, error);
+    }
+
+    console.log('✅ Arcium Encrypted Transfer Service ready');
+  }
+
+  /**
+   * Initialize the Computation Definition (one-time setup)
+   */
+  async initializeCompDef(payerKeypair: Keypair): Promise<string> {
+    if (!this.connection) {
       throw new Error('Service not initialized');
     }
 
-    console.log(`🔧 Initializing Arcium MXE and CompDef...`);
+    console.log('🔧 Initializing Arcium CompDef...');
 
-    // Get required accounts
-    const mxeAccount = getMXEAccAddress(this.programId);
-    // FIXME: @arcium-hq/client calculates wrong PDA in v0.4.0
-    const compDefAccount = new PublicKey('B1KzKYPRqAWfqbHdFW2VZ9dpxDzRYDpmtUDGQzZeLuDV');
-    const ARCIUM_PROGRAM_ID = this.programId;
+    const mxeAccount = getMXEAccAddress(PROGRAM_ID);
+    const compDefOffset = this.calculateCompDefOffset('encrypted_transfer');
+    const compDefAccount = getCompDefAccAddress(PROGRAM_ID, compDefOffset);
 
     // Check if already initialized
     const compDefInfo = await this.connection.getAccountInfo(compDefAccount);
     if (compDefInfo) {
-      console.log(`✅ Already initialized`);
+      console.log('✅ CompDef already initialized');
       return 'already_initialized';
     }
 
     // Build init_encrypted_transfer_comp_def instruction
-    // Discriminator from IDL: [250, 215, 8, 129, 167, 245, 172, 181]
-    const discriminator = Buffer.from([250, 215, 8, 129, 167, 245, 172, 181]);
-
     const instruction = new TransactionInstruction({
       keys: [
-        { pubkey: payerKeypair.publicKey, isSigner: true, isWritable: true }, // payer
-        { pubkey: mxeAccount, isSigner: false, isWritable: true }, // mxe_account
-        { pubkey: compDefAccount, isSigner: false, isWritable: true }, // comp_def_account
-        { pubkey: ARCIUM_PROGRAM_ID, isSigner: false, isWritable: false }, // arcium_program
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
+        { pubkey: payerKeypair.publicKey, isSigner: true, isWritable: true },
+        { pubkey: mxeAccount, isSigner: false, isWritable: true },
+        { pubkey: compDefAccount, isSigner: false, isWritable: true },
+        { pubkey: ARCIUM_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
-      programId: this.programId,
-      data: discriminator,
+      programId: PROGRAM_ID,
+      data: INIT_COMP_DEF_DISCRIMINATOR,
     });
 
     const transaction = new Transaction().add(instruction);
@@ -147,17 +164,13 @@ class EncryptedTransferService {
 
     await this.connection.confirmTransaction(signature, 'confirmed');
 
-    console.log(`✅ Arcium initialized: ${signature}`);
+    this.compDefAccount = compDefAccount;
+    console.log(`✅ CompDef initialized: ${signature}`);
     return signature;
   }
 
   /**
    * Create an encrypted private transfer
-   *
-   * @param fromKeypair - Sender's keypair
-   * @param toAddress - Recipient's address
-   * @param amount - Amount in lamports (will be encrypted)
-   * @returns Transfer signature and encryption details
    */
   async createEncryptedTransfer(params: {
     fromKeypair: Keypair;
@@ -165,13 +178,11 @@ class EncryptedTransferService {
     amount: bigint;
     userId?: string;
   }): Promise<{
-    computationSignature: string;
-    finalizationSignature: string;
+    signature: string;
     encryptedAmount: Uint8Array;
     nonce: Uint8Array;
     publicKey: Uint8Array;
     computationOffset: string;
-    recipientCanDecrypt: boolean;
   }> {
     const { fromKeypair, toAddress, amount, userId } = params;
 
@@ -179,240 +190,253 @@ class EncryptedTransferService {
       throw new Error('Service not initialized');
     }
 
-    console.log(`🔐 Creating encrypted transfer: ${amount} lamports`);
+    console.log(`\n🔐 Creating encrypted transfer`);
+    console.log(`   Amount: ${Number(amount) / LAMPORTS_PER_SOL} SOL`);
     console.log(`   From: ${fromKeypair.publicKey.toBase58()}`);
     console.log(`   To: ${toAddress.toBase58()}`);
 
-    // Generate encryption keys (32 bytes for x25519)
+    // Step 1: Generate encryption keys
     const privateKey = randomBytes(32);
     const publicKey = x25519.getPublicKey(privateKey);
-
-    // Generate shared secret with MXE
-    const sharedSecret = x25519.getSharedSecret(privateKey, this.mxePublicKey);
-
-    // Initialize Rescue cipher
-    const cipher = new RescueCipher(sharedSecret);
-
-    // Generate nonce
     const nonce = randomBytes(16);
 
-    // Encrypt the amount and timestamp
+    // Step 2: Create shared secret with MXE
+    const sharedSecret = x25519.getSharedSecret(privateKey, this.mxePublicKey);
+
+    // Step 3: Encrypt amount and timestamp
+    const cipher = new RescueCipher(sharedSecret);
     const timestamp = BigInt(Math.floor(Date.now() / 1000));
-    const plaintext = [amount, timestamp];
-    const ciphertext = cipher.encrypt(plaintext, nonce);
+    const ciphertext = cipher.encrypt([amount, timestamp], nonce);
 
-    console.log(`   ✅ Amount encrypted (hidden from blockchain)`);
+    console.log(`   ✅ Amount encrypted`);
 
-    // Generate computation offset
-    const computationOffset = new BN(randomBytes(8), 'hex');
+    // Step 4: Generate computation offset (random u64)
+    const computationOffset = new BN(randomBytes(8));
 
-    console.log(`   Computation offset: ${computationOffset.toString()}`);
-
-    // REAL ARCIUM MPC ENCRYPTED TRANSACTION
-    console.log(`   📡 Calling Arcium MPC program on Devnet...`);
-    console.log(`   🔒 Amount will be ENCRYPTED on-chain via MPC`);
-
-    if (!this.programId) {
-      throw new Error('Arcium program not properly initialized');
-    }
-
-    // Get required PDAs and accounts
-    const mxeAccount = getMXEAccAddress(this.programId);
-    const mempoolAccount = getMempoolAccAddress(this.programId);
-    const executingPool = getExecutingPoolAccAddress(this.programId);
-    // Using stealf_private program's private_transfer CompDef PDA
-    const compDefAccount = new PublicKey(ARCIUM_CONFIG.COMP_DEF_PRIVATE_TRANSFER);
-    const clusterAccount = getClusterAccAddress(ARCIUM_CONFIG.CLUSTER_ID);
-    const computationAccount = getComputationAccAddress(
-      this.programId,
-      computationOffset
+    // Step 5: Derive PDAs
+    const [transferAccount] = PublicKey.findProgramAddressSync(
+      [TRANSFER_SEED, fromKeypair.publicKey.toBuffer(), computationOffset.toArrayLike(Buffer, 'le', 8)],
+      PROGRAM_ID
     );
 
-    // Derive sign PDA account (seed is "SignerAccount" from IDL)
     const [signPdaAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from('SignerAccount')],
-      this.programId
+      [SIGNER_ACCOUNT_SEED],
+      PROGRAM_ID
     );
 
-    console.log(`   📍 Sign PDA Account: ${signPdaAccount.toBase58()}`);
+    // Get Arcium accounts
+    const mxeAccount = getMXEAccAddress(PROGRAM_ID);
+    const mempoolAccount = getMempoolAccAddress(PROGRAM_ID);
+    const executingPool = getExecutingPoolAccAddress(PROGRAM_ID);
+    const computationAccount = getComputationAccAddress(PROGRAM_ID, computationOffset);
+    const compDefOffset = this.calculateCompDefOffset('encrypted_transfer');
+    const compDefAccount = this.compDefAccount || getCompDefAccAddress(PROGRAM_ID, compDefOffset);
+    const clusterAccount = getClusterAccAddress(ARCIUM_CONFIG.CLUSTER_ID);
 
-    console.log(`   📤 Building private_transfer instruction...`);
+    console.log(`   Transfer Account: ${transferAccount.toBase58()}`);
+    console.log(`   Sign PDA: ${signPdaAccount.toBase58()}`);
+    console.log(`   Computation Account: ${computationAccount.toBase58()}`);
 
-    // Build instruction data manually for stealf_private program
-    // Discriminator from IDL (private_transfer): [107, 20, 177, 94, 33, 119, 16, 110]
-    const discriminator = Buffer.from([107, 20, 177, 94, 33, 119, 16, 110]);
-
-    // Encode arguments (from stealf_private IDL):
-    // 1. computation_offset: u64
-    // 2. encrypted_sender_balance: [u8; 32]
-    // 3. encrypted_amount: [u8; 32]
-    // 4. pub_key: [u8; 32]
-    // 5. nonce: u128
-
+    // Step 6: Build instruction data
+    // Args: computation_offset (u64), encrypted_amount ([u8;32]), encrypted_timestamp ([u8;32]),
+    //       sender_pubkey ([u8;32]), nonce (u128), recipient (Pubkey)
     const computationOffsetBuf = computationOffset.toArrayLike(Buffer, 'le', 8);
-    const encryptedSenderBalanceBuf = Buffer.from(ciphertext[0]); // encrypted_sender_balance (using first ciphertext)
-    const encryptedAmountBuf = Buffer.from(ciphertext[1]); // encrypted_amount (using second ciphertext)
-    const pubKeyBuf = Buffer.from(publicKey); // pub_key
+    const encryptedAmountBuf = Buffer.alloc(32);
+    Buffer.from(ciphertext[0]).copy(encryptedAmountBuf);
+    const encryptedTimestampBuf = Buffer.alloc(32);
+    Buffer.from(ciphertext[1]).copy(encryptedTimestampBuf);
+    const pubKeyBuf = Buffer.from(publicKey);
+
+    // nonce as u128 (16 bytes LE)
     const nonceBuf = Buffer.alloc(16);
-    nonceBuf.writeBigUInt64LE(BigInt(Buffer.from(nonce).readBigUInt64LE()), 0);
-    nonceBuf.writeBigUInt64LE(BigInt(Buffer.from(nonce.slice(8)).readBigUInt64LE()), 8);
+    nonce.copy(nonceBuf);
+
+    const recipientBuf = toAddress.toBuffer();
 
     const instructionData = Buffer.concat([
-      discriminator,
+      ENCRYPTED_TRANSFER_DISCRIMINATOR,
       computationOffsetBuf,
-      encryptedSenderBalanceBuf,
       encryptedAmountBuf,
+      encryptedTimestampBuf,
       pubKeyBuf,
       nonceBuf,
+      recipientBuf,
     ]);
 
-    // Arcium global program ID and fixed accounts (from IDL)
-    const ARCIUM_PROGRAM_ID = new PublicKey('Bv3Fb9VjzjWGfX18QTUcVycAfeLoQ5zZN6vv2g3cTZxp');
-    const POOL_ACCOUNT = new PublicKey('FsWbPQcJQ2cCyr9ndse13fDqds4F2Ezx2WgTL25Dke4M');
-    const CLOCK_ACCOUNT = new PublicKey('AxygBawEvVwZPetj3yPJb9sGdZvaJYsVguET1zFUQkV');
-
-    // Build instruction with all required accounts (EXACT order from IDL!)
-    // Order: payer, sign_pda_account, mxe_account, mempool_account, executing_pool,
-    //        computation_account, comp_def_account, cluster_account, pool_account,
-    //        clock_account, system_program, arcium_program
+    // Step 7: Build instruction with all accounts (order from IDL)
     const instruction = new TransactionInstruction({
       keys: [
-        { pubkey: fromKeypair.publicKey, isSigner: true, isWritable: true },   // 0: payer
-        { pubkey: signPdaAccount, isSigner: false, isWritable: true },          // 1: sign_pda_account
-        { pubkey: mxeAccount, isSigner: false, isWritable: false },             // 2: mxe_account
-        { pubkey: mempoolAccount, isSigner: false, isWritable: true },          // 3: mempool_account
-        { pubkey: executingPool, isSigner: false, isWritable: true },           // 4: executing_pool
-        { pubkey: computationAccount, isSigner: false, isWritable: true },      // 5: computation_account
-        { pubkey: compDefAccount, isSigner: false, isWritable: false },         // 6: comp_def_account
-        { pubkey: clusterAccount, isSigner: false, isWritable: true },          // 7: cluster_account
-        { pubkey: POOL_ACCOUNT, isSigner: false, isWritable: true },            // 8: pool_account
-        { pubkey: CLOCK_ACCOUNT, isSigner: false, isWritable: false },          // 9: clock_account
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // 10: system_program
-        { pubkey: ARCIUM_PROGRAM_ID, isSigner: false, isWritable: false },      // 11: arcium_program
+        { pubkey: fromKeypair.publicKey, isSigner: true, isWritable: true },   // sender
+        { pubkey: fromKeypair.publicKey, isSigner: true, isWritable: true },   // payer (same as sender)
+        { pubkey: transferAccount, isSigner: false, isWritable: true },        // transfer_account
+        { pubkey: signPdaAccount, isSigner: false, isWritable: true },         // sign_pda_account
+        { pubkey: mxeAccount, isSigner: false, isWritable: false },            // mxe_account
+        { pubkey: mempoolAccount, isSigner: false, isWritable: true },         // mempool_account
+        { pubkey: executingPool, isSigner: false, isWritable: true },          // executing_pool
+        { pubkey: computationAccount, isSigner: false, isWritable: true },     // computation_account
+        { pubkey: compDefAccount, isSigner: false, isWritable: false },        // comp_def_account
+        { pubkey: clusterAccount, isSigner: false, isWritable: true },         // cluster_account
+        { pubkey: POOL_ACCOUNT, isSigner: false, isWritable: true },           // pool_account
+        { pubkey: CLOCK_ACCOUNT, isSigner: false, isWritable: false },         // clock_account
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
+        { pubkey: ARCIUM_PROGRAM_ID, isSigner: false, isWritable: false },     // arcium_program
       ],
-      programId: this.programId,
+      programId: PROGRAM_ID,
       data: instructionData,
     });
 
-    // Send transaction
-    let realTxSignature: string;
-    try {
-      const transaction = new Transaction().add(instruction);
-      transaction.feePayer = fromKeypair.publicKey;
-      transaction.recentBlockhash = (
-        await this.connection!.getLatestBlockhash('confirmed')
-      ).blockhash;
+    // Step 8: Send transaction
+    console.log(`   📡 Sending encrypted transfer to Arcium MPC...`);
 
-      realTxSignature = await this.connection!.sendTransaction(
+    const transaction = new Transaction().add(instruction);
+    transaction.feePayer = fromKeypair.publicKey;
+    transaction.recentBlockhash = (
+      await this.connection.getLatestBlockhash('confirmed')
+    ).blockhash;
+
+    let signature: string;
+    try {
+      signature = await this.connection.sendTransaction(
         transaction,
         [fromKeypair],
         { skipPreflight: false, preflightCommitment: 'confirmed' }
       );
 
-      // Wait for confirmation
-      await this.connection!.confirmTransaction(realTxSignature, 'confirmed');
-
-      console.log(`   ✅ ENCRYPTED MPC transaction confirmed!`);
-      console.log(`      Signature: ${realTxSignature}`);
-      console.log(`      Explorer: https://explorer.solana.com/tx/${realTxSignature}?cluster=devnet`);
-      console.log(`   🔐 Amount is HIDDEN on-chain - only encrypted bytes visible!`);
+      await this.connection.confirmTransaction(signature, 'confirmed');
+      console.log(`   ✅ Transaction confirmed: ${signature}`);
+      console.log(`   🔗 https://explorer.solana.com/tx/${signature}?cluster=devnet`);
     } catch (error: any) {
-      console.error(`   ❌ Arcium MPC transaction failed:`, error.message);
+      console.error(`   ❌ Transaction failed:`, error.message);
       if (error.logs) {
-        console.error(`   📋 Logs:`, error.logs.join('\n'));
+        console.error(`   📋 Logs:`, error.logs.slice(-10).join('\n'));
       }
-      throw new Error(`Failed to send encrypted transfer: ${error.message}`);
+      throw error;
     }
 
-    // Save transfer to database with REAL signature
-    const transfer = await ArciumTransfer.create({
-      userId: userId || 'anonymous',
-      sender: fromKeypair.publicKey.toBase58(),
-      recipient: toAddress.toBase58(),
-      encryptedAmount: Buffer.from(ciphertext[0]),
-      encryptedTimestamp: Buffer.from(ciphertext[1]),
-      nonce: Buffer.from(nonce),
-      senderPublicKey: Buffer.from(publicKey),
-      computationOffset: computationOffset.toString(),
-      status: 'completed', // Transaction confirmed
-      amount: amount.toString(), // Store for debugging (encrypted on-chain)
-      computationSignature: realTxSignature,
-      finalizationSignature: realTxSignature,
-      timestamp: new Date(),
-    });
-
-    console.log(`   💾 Transfer saved to database: ${transfer._id}`);
-    console.log(`   ✅ Encrypted transfer created successfully (REAL Devnet TX)`);
+    // Step 9: Save to database
+    try {
+      await ArciumTransfer.create({
+        userId: userId || 'anonymous',
+        sender: fromKeypair.publicKey.toBase58(),
+        recipient: toAddress.toBase58(),
+        encryptedAmount: encryptedAmountBuf,
+        encryptedTimestamp: encryptedTimestampBuf,
+        nonce: nonceBuf,
+        senderPublicKey: pubKeyBuf,
+        computationOffset: computationOffset.toString(),
+        status: 'pending',
+        amount: amount.toString(),
+        computationSignature: signature,
+        timestamp: new Date(),
+      });
+      console.log(`   💾 Transfer saved to database`);
+    } catch (dbError) {
+      console.warn(`   ⚠️ Could not save to database:`, dbError);
+    }
 
     return {
-      computationSignature: realTxSignature,
-      finalizationSignature: realTxSignature,
-      encryptedAmount: new Uint8Array(ciphertext[0]),
+      signature,
+      encryptedAmount: new Uint8Array(encryptedAmountBuf),
       nonce,
       publicKey,
       computationOffset: computationOffset.toString(),
-      recipientCanDecrypt: true,
     };
   }
 
   /**
-   * Decrypt an encrypted amount
-   *
-   * @param encryptedAmount - Encrypted amount ciphertext
-   * @param nonce - Nonce used for encryption
-   * @param encryptionKey - Sender's public key
-   * @param recipientPrivateKey - Recipient's private key (x25519)
-   * @returns Decrypted amount
+   * Decrypt an encrypted amount (for recipient)
    */
-  async decryptAmount(params: {
+  decryptAmount(params: {
     encryptedAmount: Uint8Array;
     nonce: Uint8Array;
-    encryptionKey: Uint8Array;
+    senderPublicKey: Uint8Array;
     recipientPrivateKey: Uint8Array;
-  }): Promise<bigint> {
-    const { encryptedAmount, nonce, encryptionKey, recipientPrivateKey } = params;
-
-    console.log(`🔓 Decrypting amount...`);
+  }): bigint {
+    const { encryptedAmount, nonce, senderPublicKey, recipientPrivateKey } = params;
 
     // Generate shared secret
-    const sharedSecret = x25519.getSharedSecret(recipientPrivateKey, encryptionKey);
+    const sharedSecret = x25519.getSharedSecret(recipientPrivateKey, senderPublicKey);
 
-    // Initialize cipher
+    // Initialize cipher and decrypt
     const cipher = new RescueCipher(sharedSecret);
-
-    // Decrypt
     const decrypted = cipher.decrypt([Array.from(encryptedAmount)], nonce);
-
-    console.log(`   ✅ Amount decrypted: ${decrypted[0]} lamports`);
 
     return decrypted[0];
   }
 
   /**
-   * Get encrypted transfer by ID
+   * Get transfer status from on-chain TransferAccount
    */
-  async getTransferById(transferId: string): Promise<any> {
-    const transfer = await ArciumTransfer.findById(transferId);
-    if (!transfer) {
-      throw new Error('Transfer not found');
+  async getTransferStatus(sender: PublicKey, computationOffset: BN): Promise<{
+    status: 'pending' | 'completed' | 'failed' | 'not_found';
+    encryptedResultAmount?: Uint8Array;
+    resultNonce?: Uint8Array;
+    resultEncryptionKey?: Uint8Array;
+  }> {
+    if (!this.connection) {
+      throw new Error('Service not initialized');
     }
-    return transfer;
+
+    const [transferAccount] = PublicKey.findProgramAddressSync(
+      [TRANSFER_SEED, sender.toBuffer(), computationOffset.toArrayLike(Buffer, 'le', 8)],
+      PROGRAM_ID
+    );
+
+    const accountInfo = await this.connection.getAccountInfo(transferAccount);
+    if (!accountInfo) {
+      return { status: 'not_found' };
+    }
+
+    // Parse TransferAccount data
+    // Skip 8-byte discriminator
+    const data = accountInfo.data.slice(8);
+
+    // TransferAccount layout:
+    // sender: 32, recipient: 32, encrypted_amount: 32, nonce: 16, sender_pubkey: 32,
+    // timestamp: 8, status: 1, encrypted_result_amount: 32, result_nonce: 16, result_encryption_key: 32
+    const statusByte = data[32 + 32 + 32 + 16 + 32 + 8];
+    const status = statusByte === 0 ? 'pending' : statusByte === 1 ? 'completed' : 'failed';
+
+    if (status === 'completed') {
+      const offset = 32 + 32 + 32 + 16 + 32 + 8 + 1;
+      return {
+        status,
+        encryptedResultAmount: data.slice(offset, offset + 32),
+        resultNonce: data.slice(offset + 32, offset + 32 + 16),
+        resultEncryptionKey: data.slice(offset + 32 + 16, offset + 32 + 16 + 32),
+      };
+    }
+
+    return { status };
   }
 
   /**
-   * Get all transfers for a user
+   * Wait for MPC computation to complete
    */
-  async getUserTransfers(userId: string): Promise<any[]> {
-    const transfers = await ArciumTransfer.find({ userId }).sort({ timestamp: -1 });
-    return transfers;
-  }
+  async waitForCompletion(
+    sender: PublicKey,
+    computationOffset: BN,
+    timeoutMs: number = 60000
+  ): Promise<{
+    status: 'completed' | 'failed' | 'timeout' | 'pending' | 'not_found';
+    encryptedResultAmount?: Uint8Array;
+    resultNonce?: Uint8Array;
+    resultEncryptionKey?: Uint8Array;
+  }> {
+    const startTime = Date.now();
+    const pollInterval = 2000;
 
-  /**
-   * Get received transfers for an address
-   */
-  async getReceivedTransfers(address: string): Promise<any[]> {
-    const transfers = await ArciumTransfer.find({ recipient: address }).sort({ timestamp: -1 });
-    return transfers;
+    while (Date.now() - startTime < timeoutMs) {
+      const result = await this.getTransferStatus(sender, computationOffset);
+
+      if (result.status === 'completed' || result.status === 'failed') {
+        return result;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    return { status: 'timeout' };
   }
 
   /**
@@ -422,7 +446,6 @@ class EncryptedTransferService {
     totalTransfers: number;
     pendingTransfers: number;
     completedTransfers: number;
-    totalVolumeEncrypted: boolean;
   }> {
     const [total, pending] = await Promise.all([
       ArciumTransfer.countDocuments(),
@@ -433,15 +456,27 @@ class EncryptedTransferService {
       totalTransfers: total,
       pendingTransfers: pending,
       completedTransfers: total - pending,
-      totalVolumeEncrypted: true, // Volumes are encrypted, cannot be calculated
     };
   }
 
   /**
-   * Check if service is initialized
+   * Check if service is ready
    */
-  isInitialized(): boolean {
+  isReady(): boolean {
     return this.connection !== null && this.mxePublicKey !== null;
+  }
+
+  /**
+   * Get service info
+   */
+  getInfo() {
+    return {
+      programId: PROGRAM_ID.toBase58(),
+      arciumProgramId: ARCIUM_PROGRAM_ID.toBase58(),
+      clusterId: ARCIUM_CONFIG.CLUSTER_ID,
+      compDefAccount: this.compDefAccount?.toBase58() || null,
+      ready: this.isReady(),
+    };
   }
 }
 

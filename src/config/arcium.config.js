@@ -21,16 +21,28 @@ export const ARCIUM_CONFIG = {
         185, 95, 149, 7, 4, 186, 213, 240, 72, 99, 178, 235, 183, 45, 153, 36,
     ]),
     /**
-     * Arcium program ID (to be set after deployment)
+     * Arcium program ID - arcium_private_transfer program
+     * Deployed on devnet with encrypted_transfer instruction
+     * New deployment: HcvbRxkVBvJEtkexVgi9JjLpas74TbYASkpLeqaxgApi
      */
-    PROGRAM_ID: process.env.ARCIUM_PROGRAM_ID || '8scvtGbABNPm5uGvE4jksvoUkuqSeghiVzSMVJKjdDVf',
+    PROGRAM_ID: process.env.ARCIUM_PROGRAM_ID || 'HcvbRxkVBvJEtkexVgi9JjLpas74TbYASkpLeqaxgApi',
     /**
-     * Computation Definition PDAs for stealf_private program
-     * These are generated from comp_def_offset("private_transfer") and comp_def_offset("get_private_balance")
-     * Program: 8scvtGbABNPm5uGvE4jksvoUkuqSeghiVzSMVJKjdDVf
+     * Arcium global program ID
      */
-    COMP_DEF_PRIVATE_TRANSFER: 'vU8RXCpfP47EwP9RRvFAvCVycLtZxCXexFrnCJqENge',
-    COMP_DEF_GET_BALANCE: 'AXW1rzF6gCpJUffQzhmzA2zbKZctSHyNazXHrC8XDM5i',
+    ARCIUM_PROGRAM_ID: 'Bv3Fb9VjzjWGfX18QTUcVycAfeLoQ5zZN6vv2g3cTZxp',
+    /**
+     * Fixed Arcium accounts from IDL
+     */
+    POOL_ACCOUNT: 'FsWbPQcJQ2cCyr9ndse13fDqds4F2Ezx2WgTL25Dke4M',
+    CLOCK_ACCOUNT: 'AxygBawEvVwZPetj3yPJb9sGdZvaJYsVguET1zFUQkV',
+    /**
+     * Instruction discriminators from IDL
+     */
+    DISCRIMINATORS: {
+        ENCRYPTED_TRANSFER: [73, 166, 170, 205, 212, 233, 55, 97],
+        ENCRYPTED_TRANSFER_CALLBACK: [151, 231, 194, 137, 216, 104, 254, 108],
+        INIT_COMP_DEF: [250, 215, 8, 129, 167, 245, 172, 181],
+    },
     /**
      * Solana RPC URL
      */

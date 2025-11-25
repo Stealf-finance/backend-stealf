@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, index: true },
+  username: { type: String, unique: true, sparse: true, index: true },
+  profileImage: { type: String }, // URL or base64 of profile image
 
   // Solana wallet
   solanaWallet: { type: String, index: true },

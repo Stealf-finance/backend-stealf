@@ -7,7 +7,7 @@ resolution = true
 skip-lint = true
 
 [programs.devnet]
-arcium_private_transfer = "G3dDdXck7X3f7o3ytqZcVigcP4aJAQBDto6XC1MQoFfp"
+arcium_private_transfer = "9iLVPsyFbARWtNex6SetuE1JD7xyXPxV3Y9paMJ7MFAh"
 
 [programs.localnet]
 arcium_private_transfer = "9W1vpuyuvb7k6kj7qH2pysnL6haHsX97KxYBmuXfWgAt"

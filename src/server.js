@@ -13,8 +13,7 @@ import { indexerService } from './services/umbra/indexer.service.js';
 import { simpleMixerService } from './services/mixer/simple-mixer.service.js';
 import { encryptedTransferService } from './services/arcium/encrypted-transfer.service.js';
 import { privacyPoolService } from './services/privacy-pool.service.js';
-import { ARCIUM_CONFIG } from './config/arcium.config.js';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 // Polyfill crypto.getRandomValues for Node.js (required by @noble/hashes)
 if (typeof globalThis.crypto === 'undefined') {
     globalThis.crypto = crypto;
@@ -138,10 +137,7 @@ class SteafBackendServer {
             await simpleMixerService.initialize(connection);
             // Initialize Arcium Encrypted Transfer service
             console.log('🔐 Initializing Arcium Encrypted Transfers...');
-            const arciumProgramId = ARCIUM_CONFIG.PROGRAM_ID
-                ? new PublicKey(ARCIUM_CONFIG.PROGRAM_ID)
-                : undefined;
-            await encryptedTransferService.initialize(connection, arciumProgramId);
+            await encryptedTransferService.initialize(connection);
             // Initialize Privacy Pool service
             console.log('🔒 Initializing Privacy Pool...');
             await privacyPoolService.initialize(rpcUrl);

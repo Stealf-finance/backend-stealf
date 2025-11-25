@@ -9,7 +9,7 @@ import { Program, AnchorProvider } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { readFileSync } from "fs";
 import { homedir } from "os";
-const PROGRAM_ID = "8njQJYYCqeUZ37WvNW852ALRqykiUMxqHjT6KPxUKqeq";
+const PROGRAM_ID = "8zD4DhL5FN4va4fDyBsNitgJT9R4BWYhfi61Hvk5dM9H";
 const RPC_URL = "https://api.devnet.solana.com";
 // Read keypair from file
 function readKpJson(path) {

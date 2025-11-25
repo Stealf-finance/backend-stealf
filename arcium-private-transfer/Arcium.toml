@@ -6,7 +6,7 @@ solana_version = "1.18.0"
 
 # Arcium configuration for private transfer program
 [programs.devnet]
-arcium_private_transfer = "9Y9mYGUup4jXo1cw6VBUGme21GH7XYAriLku57EQ7wxQ"
+arcium_private_transfer = "9iLVPsyFbARWtNex6SetuE1JD7xyXPxV3Y9paMJ7MFAh"
 
 [registry]
 url = "https://api.devnet.solana.com"

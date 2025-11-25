@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@arcium-hq/client": "^0.4.0",
+    "@arcium-hq/reader": "^0.4.0",
     "@coral-xyz/anchor": "0.31.1",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",

@@ -8,6 +8,7 @@ import umbraRoutes from './routes/umbra.routes.js';
 import mixerRoutes from './routes/mixer.routes.js';
 import arciumRoutes from './routes/arcium.routes.js';
 import arciumCircuitRoutes from './routes/arcium-circuit.routes.js';
+import userRoutes from './routes/user.routes.js';
 import { umbraClientService } from './services/umbra/umbra-client.service.js';
 import { indexerService } from './services/umbra/indexer.service.js';
 import { simpleMixerService } from './services/mixer/simple-mixer.service.js';
@@ -115,6 +116,9 @@ class SteafBackendServer {
     // Arcium Circuit file serving (for MPC nodes)
     this.app.use('/', arciumCircuitRoutes);
 
+    // User routes (search by username)
+    this.app.use('/api/users', userRoutes);
+
     // 404 handler
     this.app.use((req: Request, res: Response) => {
       res.status(404).json({
@@ -161,10 +165,7 @@ class SteafBackendServer {
 
       // Initialize Arcium Encrypted Transfer service
       console.log('🔐 Initializing Arcium Encrypted Transfers...');
-      const arciumProgramId = ARCIUM_CONFIG.PROGRAM_ID
-        ? new PublicKey(ARCIUM_CONFIG.PROGRAM_ID)
-        : undefined;
-      await encryptedTransferService.initialize(connection, arciumProgramId);
+      await encryptedTransferService.initialize(connection);
 
       // Initialize Privacy Pool service
       console.log('🔒 Initializing Privacy Pool...');
