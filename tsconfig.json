@@ -23,6 +23,7 @@
     "src/routes/umbra.routes.ts",
     "src/routes/arcium-init.routes.ts",
     "src/config/zk-artifacts.config.ts",
+    "src/models/arcium-transfer.model.ts",
     "arcium-private-transfer",
     "scripts",
     "dist"
