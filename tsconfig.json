@@ -9,8 +9,20 @@
     "resolveJsonModule": true,
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": false,
+    "noImplicitAny": false
   },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "src/lib/umbra-sdk",
+    "arcium-private-transfer",
+    "scripts",
+    "dist"
+  ],
   "ts-node": {
     "esm": true,
     "experimentalSpecifierResolution": "node"
