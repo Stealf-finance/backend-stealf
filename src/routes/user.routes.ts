@@ -99,14 +99,15 @@ router.post('/register', async (req, res) => {
       await user.save();
     } else {
       // Create new user
-      user = new User({
+      const userData: any = {
         email,
         username,
         solanaWallet,
         profileImage,
         gridUserId,
         gridAddress,
-      } as any);
+      };
+      user = new User(userData);
       await user.save();
     }
 
