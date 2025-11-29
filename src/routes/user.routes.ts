@@ -299,6 +299,101 @@ router.get('/autocomplete', async (req, res) => {
 });
 
 /**
+ * Save public wallet (Solana) for user
+ * POST /api/users/public-wallet
+ */
+router.post('/public-wallet', async (req, res) => {
+  try {
+    const { email, solanaWallet, encryptedPrivateKey } = req.body;
+
+    if (!email || !solanaWallet || !encryptedPrivateKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'email, solanaWallet, and encryptedPrivateKey are required',
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Only save if not already set (don't overwrite existing wallet)
+    if (!user.encryptedPrivateKey) {
+      user.solanaWallet = solanaWallet;
+      user.encryptedPrivateKey = encryptedPrivateKey;
+      await user.save();
+      console.log(`✅ Public wallet saved for ${email}: ${solanaWallet}`);
+    } else {
+      console.log(`ℹ️ Public wallet already exists for ${email}: ${user.solanaWallet}`);
+    }
+
+    res.json({
+      success: true,
+      solanaWallet: user.solanaWallet,
+    });
+  } catch (error: any) {
+    console.error('Error saving public wallet:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * Get public wallet for user
+ * GET /api/users/public-wallet?email=xxx
+ */
+router.get('/public-wallet', async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Email query parameter is required',
+      });
+    }
+
+    const user = await User.findOne({ email }).select('solanaWallet encryptedPrivateKey');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    if (!user.encryptedPrivateKey) {
+      return res.json({
+        success: true,
+        hasPublicWallet: false,
+        solanaWallet: null,
+        encryptedPrivateKey: null,
+      });
+    }
+
+    res.json({
+      success: true,
+      hasPublicWallet: true,
+      solanaWallet: user.solanaWallet,
+      encryptedPrivateKey: user.encryptedPrivateKey,
+    });
+  } catch (error: any) {
+    console.error('Error fetching public wallet:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
  * Save private wallet for user
  * POST /api/users/private-wallet
  */
