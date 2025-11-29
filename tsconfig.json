@@ -18,7 +18,11 @@
   "include": ["src/**/*"],
   "exclude": [
     "node_modules",
-    "src/lib/umbra-sdk",
+    "src/lib",
+    "src/services/umbra",
+    "src/routes/umbra.routes.ts",
+    "src/routes/arcium-init.routes.ts",
+    "src/config/zk-artifacts.config.ts",
     "arcium-private-transfer",
     "scripts",
     "dist"
