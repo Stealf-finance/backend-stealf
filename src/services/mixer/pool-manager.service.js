@@ -54,7 +54,7 @@ class PoolManagerService {
             this.poolKeypair = Keypair.generate();
             console.log('🔑 Generated temporary pool wallet:');
             console.log(`   Address: ${this.poolKeypair.publicKey.toBase58()}`);
-            console.log(`   Private Key (base58): ${bs58.encode(this.poolKeypair.secretKey)}`);
+            // SECURITY: Never log private keys in production
             console.warn('⚠️  WARNING: Add MIXER_POOL_PRIVATE_KEY to .env for production');
         }
     }
