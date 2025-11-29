@@ -123,4 +123,5 @@ const MixerDepositSchema: Schema = new Schema(
 MixerDepositSchema.index({ claimed: 1, depositedAt: 1 });
 MixerDepositSchema.index({ claimHash: 1, claimed: 1 });
 
-export const MixerDeposit = mongoose.model<IMixerDeposit>('MixerDeposit', MixerDepositSchema);
+// Export as any to avoid TypeScript union type complexity error
+export const MixerDeposit: any = mongoose.model('MixerDeposit', MixerDepositSchema);

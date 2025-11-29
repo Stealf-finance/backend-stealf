@@ -31,4 +31,5 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-export const User = mongoose.model('User', userSchema);
+// Export as any to avoid TypeScript union type complexity error
+export const User: any = mongoose.model('User', userSchema);

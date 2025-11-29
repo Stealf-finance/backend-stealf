@@ -21,10 +21,12 @@
     "src/lib",
     "src/services/umbra",
     "src/services/arcium",
+    "src/services/mixer",
     "src/routes/umbra.routes.ts",
     "src/routes/arcium-init.routes.ts",
     "src/config/zk-artifacts.config.ts",
     "src/models/arcium-transfer.model.ts",
+    "src/models/mixer-deposit.model.ts",
     "arcium-private-transfer",
     "scripts",
     "dist"
