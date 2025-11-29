@@ -106,7 +106,7 @@ router.post('/register', async (req, res) => {
         profileImage,
         gridUserId,
         gridAddress,
-      });
+      } as any);
       await user.save();
     }
 
