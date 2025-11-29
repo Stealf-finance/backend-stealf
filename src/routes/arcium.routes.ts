@@ -468,6 +468,69 @@ router.post('/pool/transfer', async (req: Request, res: Response): Promise<void>
 });
 
 /**
+ * POST /arcium/airdrop
+ *
+ * Request devnet airdrop for any wallet address
+ */
+router.post('/airdrop', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { walletAddress } = req.body;
+
+    if (!walletAddress) {
+      res.status(400).json({ error: 'walletAddress is required' });
+      return;
+    }
+
+    let pubkey: PublicKey;
+    try {
+      pubkey = new PublicKey(walletAddress);
+    } catch (error) {
+      res.status(400).json({ error: 'Invalid wallet address' });
+      return;
+    }
+
+    const { Connection } = await import('@solana/web3.js');
+    const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+
+    console.log(`Requesting airdrop for: ${walletAddress}`);
+
+    // Request 2 SOL airdrop
+    const signature = await connection.requestAirdrop(pubkey, 2 * LAMPORTS_PER_SOL);
+
+    // Wait for confirmation
+    const latestBlockhash = await connection.getLatestBlockhash();
+    await connection.confirmTransaction({
+      signature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+    });
+
+    // Get new balance
+    const balance = await connection.getBalance(pubkey);
+
+    console.log(`Airdrop successful! New balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+
+    res.json({
+      success: true,
+      signature,
+      balance: balance / LAMPORTS_PER_SOL,
+      explorer: `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
+    });
+  } catch (error: any) {
+    console.error('Airdrop error:', error);
+
+    let errorMessage = 'Airdrop failed';
+    if (error.message?.includes('429') || error.message?.includes('rate')) {
+      errorMessage = 'Rate limit reached. Try again in a few minutes.';
+    } else if (error.message?.includes('airdrop')) {
+      errorMessage = 'Airdrop limit reached for this address. Try again later.';
+    }
+
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+/**
  * GET /arcium/pool/info
  */
 router.get('/pool/info', async (req: Request, res: Response): Promise<void> => {

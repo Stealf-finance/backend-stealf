@@ -16,19 +16,19 @@ export const ARCIUM_CONFIG = {
   /**
    * MXE (Multi-Execution Environment) X25519 public key
    * Used for encrypting data that MPC nodes will process
-   * This is the same as used in Umbra SDK
+   * Fetched from MXE PDA: HzauPmorFXUzbpFvk3qUQEaURDtgtuzSkCKUxPzKRo6x
    */
   MXE_X25519_PUBLIC_KEY: new Uint8Array([
-    27, 146, 220, 227, 8, 51, 189, 69, 119, 116, 110, 176, 137, 108, 212, 154,
-    185, 95, 149, 7, 4, 186, 213, 240, 72, 99, 178, 235, 183, 45, 153, 36,
+    223, 178, 1, 205, 14, 53, 3, 229, 198, 4, 18, 236, 212, 128, 83, 231,
+    222, 2, 37, 116, 235, 162, 108, 118, 185, 1, 129, 108, 200, 45, 1, 0,
   ]),
 
   /**
-   * Arcium program ID - arcium_private_transfer program
+   * Arcium program ID - stealf_private_transfer program
    * Deployed on devnet with encrypted_transfer instruction
-   * New deployment: HcvbRxkVBvJEtkexVgi9JjLpas74TbYASkpLeqaxgApi
+   * Latest deployment: 8pe8Hb3bSV8qXZ6Tahe9DE32wHrQvKMmwiyiXMDfcn5C
    */
-  PROGRAM_ID: process.env.ARCIUM_PROGRAM_ID || '6jHxqxwB7sRykqAGk1aoEYeEbxHvWxGSzXqrFXCQ25aA',
+  PROGRAM_ID: process.env.ARCIUM_PROGRAM_ID || '8pe8Hb3bSV8qXZ6Tahe9DE32wHrQvKMmwiyiXMDfcn5C',
 
   /**
    * Arcium global program ID
