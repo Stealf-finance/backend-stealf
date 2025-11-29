@@ -5,9 +5,13 @@ const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, sparse: true, index: true },
   profileImage: { type: String }, // URL or base64 of profile image
 
-  // Solana wallet
+  // Solana wallet (public)
   solanaWallet: { type: String, index: true },
   encryptedPrivateKey: { type: String }, // Encrypted wallet private key
+
+  // Private wallet (for privacy transactions)
+  privateWalletAddress: { type: String, index: true },
+  encryptedPrivateWalletKey: { type: String }, // Encrypted private wallet key
 
   // Umbra Privacy (encrypted)
   masterViewingKey: { type: String }, // Encrypted master viewing key

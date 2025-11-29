@@ -298,4 +298,99 @@ router.get('/autocomplete', async (req, res) => {
   }
 });
 
+/**
+ * Save private wallet for user
+ * POST /api/users/private-wallet
+ */
+router.post('/private-wallet', async (req, res) => {
+  try {
+    const { email, privateWalletAddress, encryptedPrivateWalletKey } = req.body;
+
+    if (!email || !privateWalletAddress || !encryptedPrivateWalletKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'email, privateWalletAddress, and encryptedPrivateWalletKey are required',
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Only save if not already set (don't overwrite existing wallet)
+    if (!user.privateWalletAddress) {
+      user.privateWalletAddress = privateWalletAddress;
+      user.encryptedPrivateWalletKey = encryptedPrivateWalletKey;
+      await user.save();
+      console.log(`✅ Private wallet saved for ${email}: ${privateWalletAddress}`);
+    } else {
+      console.log(`ℹ️ Private wallet already exists for ${email}: ${user.privateWalletAddress}`);
+    }
+
+    res.json({
+      success: true,
+      privateWalletAddress: user.privateWalletAddress,
+    });
+  } catch (error: any) {
+    console.error('Error saving private wallet:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * Get private wallet for user
+ * GET /api/users/private-wallet?email=xxx
+ */
+router.get('/private-wallet', async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Email query parameter is required',
+      });
+    }
+
+    const user = await User.findOne({ email }).select('privateWalletAddress encryptedPrivateWalletKey');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    if (!user.privateWalletAddress) {
+      return res.json({
+        success: true,
+        hasPrivateWallet: false,
+        privateWalletAddress: null,
+        encryptedPrivateWalletKey: null,
+      });
+    }
+
+    res.json({
+      success: true,
+      hasPrivateWallet: true,
+      privateWalletAddress: user.privateWalletAddress,
+      encryptedPrivateWalletKey: user.encryptedPrivateWalletKey,
+    });
+  } catch (error: any) {
+    console.error('Error fetching private wallet:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
 export default router;
