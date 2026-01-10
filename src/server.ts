@@ -4,7 +4,9 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import arciumRoutes from './routes/arcium.routes.js';
 import userRoutes from './routes/user.routes.js';
+import rhinoRoutes from './routes/rhino.routes.js';
 import { privacyPoolService } from './services/privacy-pool.service.js';
+import { rhinoService } from './services/rhino.service.js';
 
 /**
  * Server configuration
@@ -81,6 +83,9 @@ class SteafBackendServer {
     // User routes (search by username)
     this.app.use('/api/users', userRoutes);
 
+    // Rhino.fi bridge routes (cross-chain)
+    this.app.use('/api/rhino', rhinoRoutes);
+
     // 404 handler
     this.app.use((req: Request, res: Response) => {
       res.status(404).json({
@@ -116,6 +121,10 @@ class SteafBackendServer {
       const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
       await privacyPoolService.initialize(rpcUrl);
 
+      // Initialize Rhino.fi Bridge service
+      console.log('🌉 Initializing Rhino.fi Bridge...');
+      await rhinoService.initialize();
+
       // Configure middleware and routes
       this.configureMiddleware();
       this.configureRoutes();
@@ -140,6 +149,13 @@ class SteafBackendServer {
         console.log('');
         console.log('   👤 Users:');
         console.log('   GET  /api/users/search?username=xxx');
+        console.log('');
+        console.log('   🌉 Rhino.fi Bridge:');
+        console.log('   GET  /api/rhino/configs');
+        console.log('   POST /api/rhino/deposit-address');
+        console.log('   GET  /api/rhino/status/:quoteId');
+        console.log('   GET  /api/rhino/history');
+        console.log('   POST /api/rhino/webhook');
         console.log('='.repeat(60) + '\n');
       });
     } catch (error) {
