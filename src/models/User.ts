@@ -1,32 +1,55 @@
-import mongoose from 'mongoose';
+import mongoose, {Document, Schema } from "mongoose";
+import bcrypt from 'bcryptjs';
 
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, index: true },
+export interface IUser extends Document{
+    email: string;
+    pseudo: string;
+    cash_wallet: string;
+    stealf_wallet: string;
+    turnkey_subOrgId: string;
+    status: 'pending' | 'active';
+    createdAt: Date;
+    updateAt: Date;
+    lastLoginAt?: Date;
+}
 
-  // Solana wallet
-  solanaWallet: { type: String, index: true },
-  encryptedPrivateKey: { type: String }, // Encrypted wallet private key
-
-  // Umbra Privacy (encrypted)
-  masterViewingKey: { type: String }, // Encrypted master viewing key
-  arciumX25519PublicKey: { type: String }, // Public key for Rescue cipher encryption
-
-  // Privacy preferences
-  preferredMode: {
+const userSchema = new Schema<IUser>({
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        lowercase: true,
+        trim: true,
+    },
+    pseudo: {
+        type: String,
+        required: [true, 'Pseudo is required'],
+        unique: true,
+        trim: true,
+    },
+    cash_wallet:{
+        type: String,
+        required: [true, 'Cash wallet is required'],
+    },
+    stealf_wallet:{
+        type: String,
+        required: [true, 'Cash wallet is required'],
+    },
+    turnkey_subOrgId: {
     type: String,
-    enum: ['public', 'confidential'],
-    default: 'public'
-  },
-
-  // Grid integration
-  gridUserId: { type: String, index: true },
-  gridAddress: { type: String, index: true },
-
-  // Timestamps
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
+    required: [true, 'Turnkey subOrgID is required'],
+    unique: true,
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'active'],
+        default: 'pending',
+    },
+    lastLoginAt: {
+        type: Date,
+    },
 }, {
-  timestamps: true
+    timestamps: true
 });
 
-export const User = mongoose.model('User', userSchema);
+export const User = mongoose.model<IUser>('User', userSchema);
