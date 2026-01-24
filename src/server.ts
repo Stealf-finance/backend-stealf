@@ -5,8 +5,10 @@ import mongoose from 'mongoose';
 import arciumRoutes from './routes/arcium.routes.js';
 import userRoutes from './routes/user.routes.js';
 import rhinoRoutes from './routes/rhino.routes.js';
+import rainRoutes from './routes/rain.routes.js';
 import { privacyPoolService } from './services/privacy-pool.service.js';
 import { rhinoService } from './services/rhino.service.js';
+import { rainService } from './services/rain.service.js';
 
 /**
  * Server configuration
@@ -86,6 +88,9 @@ class SteafBackendServer {
     // Rhino.fi bridge routes (cross-chain)
     this.app.use('/api/rhino', rhinoRoutes);
 
+    // Rain Cards routes (KYC, cards, on-ramp/off-ramp)
+    this.app.use('/api/rain', rainRoutes);
+
     // 404 handler
     this.app.use((req: Request, res: Response) => {
       res.status(404).json({
@@ -125,6 +130,10 @@ class SteafBackendServer {
       console.log('🌉 Initializing Rhino.fi Bridge...');
       await rhinoService.initialize();
 
+      // Initialize Rain Cards service
+      console.log('💳 Initializing Rain Cards...');
+      await rainService.initialize();
+
       // Configure middleware and routes
       this.configureMiddleware();
       this.configureRoutes();
@@ -137,6 +146,7 @@ class SteafBackendServer {
         console.log(`📡 Server:       http://localhost:${PORT}`);
         console.log(`💾 MongoDB:      ${MONGODB_URI}`);
         console.log(`🔒 Privacy Pool: ${privacyPoolService.isReady() ? 'Ready' : 'Not initialized'}`);
+        console.log(`💳 Rain Cards:   ${rainService.isReady() ? 'Ready' : 'Not configured'} (${rainService.getEnvironment()})`);
         console.log(`🔗 Solana RPC:   ${rpcUrl}`);
         console.log('='.repeat(60));
         console.log('\n📚 Available endpoints:');
@@ -156,6 +166,13 @@ class SteafBackendServer {
         console.log('   GET  /api/rhino/status/:quoteId');
         console.log('   GET  /api/rhino/history');
         console.log('   POST /api/rhino/webhook');
+        console.log('');
+        console.log('   💳 Rain Cards (PUBLIC wallet only):');
+        console.log('   GET  /api/rain/status');
+        console.log('   POST /api/rain/kyc/apply');
+        console.log('   GET  /api/rain/kyc/status/:userId');
+        console.log('   POST /api/rain/kyc/document/:userId');
+        console.log('   POST /api/rain/webhook');
         console.log('='.repeat(60) + '\n');
       });
     } catch (error) {
