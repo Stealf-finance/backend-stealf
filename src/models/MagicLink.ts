@@ -30,7 +30,6 @@ const magicLinkSchema = new Schema<IMagicLink>({
     expiresAt: {
         type: Date,
         required: true,
-        index: true,
     },
     used: {
         type: Boolean,

@@ -150,12 +150,13 @@ export class UserController {
 
     /**
      * GET /api/users/:userId
-     * retrieve user's infos
+     * retrieve user's infos by cash_wallet address
      */
     static async getUser(req: Request, res: Response, next: NextFunction) {
         try {
             const { userId } = req.params;
-            const user = await User.findById(userId);
+
+            const user = await User.findOne({ cash_wallet: userId });
 
             if (!user){
                 return res.status(404).json({ error: 'User not found '});

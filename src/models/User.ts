@@ -1,5 +1,4 @@
 import mongoose, {Document, Schema } from "mongoose";
-import bcrypt from 'bcryptjs';
 
 export interface IUser extends Document{
     email: string;
@@ -30,6 +29,8 @@ const userSchema = new Schema<IUser>({
     cash_wallet:{
         type: String,
         required: [true, 'Cash wallet is required'],
+        unique: true,
+        index: true,
     },
     stealf_wallet:{
         type: String,
