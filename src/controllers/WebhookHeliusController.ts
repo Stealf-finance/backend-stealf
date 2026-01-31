@@ -19,11 +19,6 @@ export class WebhookHeliusController {
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
 
-            console.log('=== WEBHOOK RECEIVED ===');
-            console.log('Timestamp:', new Date().toISOString());
-            console.log('Body:', JSON.stringify(req.body, null, 2));
-            console.log('========================');
-
             await TransactionHandler.handleTransaction(req.body);
 
             return res.status(200).json({ success: true});

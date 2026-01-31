@@ -11,6 +11,7 @@ declare global {
                 organizationId: string;
                 expiry: number;
                 publicKey: string;
+                mongoUserId?: string; // MongoDB ObjectId
             };
         }
     }
@@ -74,8 +75,11 @@ export async function verifyAuth(req: Request, res: Response, next: NextFunction
         if (!userExist){
             return res.status(401).json({ error: 'User not found' });
         }
-        
-        req.user = decoded;
+
+        req.user = {
+            ...decoded,
+            mongoUserId: userExist._id.toString(), // Add MongoDB ObjectId
+        };
 
         next();
         console.log('JWT verified successfully!');

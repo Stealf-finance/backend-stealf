@@ -162,6 +162,9 @@ export class UserController {
                 return res.status(404).json({ error: 'User not found '});
             }
 
+            user.lastLoginAt = new Date();
+            await user.save();
+
             return res.json({
                 success: true,
                 data: {

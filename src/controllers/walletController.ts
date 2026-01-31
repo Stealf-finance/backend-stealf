@@ -13,10 +13,8 @@ export class WalletController {
             const limit = parseInt(req.query.limit as string) || 10;
 
             const rawTransactions = await solanaService.getTransactions(address, limit);
-            console.log(`[getHistory] Fetched ${rawTransactions.length} raw transactions for ${address} (limit: ${limit})`);
 
             const parsedTransactions = await parseTransactions(rawTransactions, address);
-            console.log(`[getHistory] Returning ${parsedTransactions.length} parsed transactions`);
 
             return res.status(200).json({
                 success: true,

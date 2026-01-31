@@ -17,6 +17,7 @@ class SocketService {
 
         this.io.on('connection', (socket) => {
             const subscribedWallets = new Set<string>();
+            const subscribedUsers = new Set<string>();
 
             socket.on('subscribe:wallet', (walletAddress: string) => {
                 if (!subscribedWallets.has(walletAddress)) {
@@ -25,8 +26,16 @@ class SocketService {
                 }
             });
 
+            socket.on('subscribe:user', (userId: string) => {
+                if (!subscribedUsers.has(userId)) {
+                    socket.join(`user:${userId}`);
+                    subscribedUsers.add(userId);
+                }
+            });
+
             socket.on('disconnect', () => {
                 subscribedWallets.clear();
+                subscribedUsers.clear();
             });
         });
 
@@ -54,6 +63,29 @@ class SocketService {
         this.io.to(walletAddress).emit('transaction:new', {
             address: walletAddress,
             transaction,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    emitPrivateTransferUpdate(userId: string, transferData: {
+        transferId: string;
+        status: string;
+        amount: number;
+        tokenMint?: string;
+        transactions?: {
+            vaultDepositTx?: string;
+            privacyCashDepositTx?: string;
+            privacyCashWithdrawTx?: string;
+        };
+        errorMessage?: string;
+    }) {
+        if (!this.io) {
+            console.warn('Socket.io not initialized');
+            return;
+        }
+
+        this.io.to(`user:${userId}`).emit('private-transfer:status-update', {
+            ...transferData,
             timestamp: new Date().toISOString()
         });
     }
