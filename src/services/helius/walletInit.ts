@@ -1,9 +1,19 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl, AddressLookupTableProgram } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { CacheService } from "../cache/cacheService";
 import { parseHeliusTransaction } from "../wallet/transactionParser";
 
-const RPC_ENDPOINT = process.env.SOLANA_RPC_URL || clusterApiUrl("devnet");
-const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+let connection: Connection | null = null;
+
+function getConnection(): Connection {
+    if (!connection) {
+        const RPC_ENDPOINT = process.env.SOLANA_RPC_URL;
+        if (!RPC_ENDPOINT) {
+            throw new Error('SOLANA_RPC_URL not found in environment variables');
+        }
+        connection = new Connection(RPC_ENDPOINT, 'confirmed');
+    }
+    return connection;
+}
 
 
 export const solanaService = {
@@ -19,7 +29,7 @@ export const solanaService = {
 
         try {
             const publicKey = new PublicKey(walletAddress);
-            const balanceInLamports = await connection.getBalance(publicKey);
+            const balanceInLamports = await getConnection().getBalance(publicKey);
             const balanceInSOL = balanceInLamports / LAMPORTS_PER_SOL;
 
             await CacheService.set(cacheKey, balanceInSOL, 0);
@@ -42,48 +52,32 @@ export const solanaService = {
         }
 
         try {
-            const heliusApiKey = process.env.HELIUS_API_KEY;
-            if (!heliusApiKey) {
-                throw new Error('HELIUS_API_KEY not found in environment variables');
+            const publicKey = new PublicKey(address);
+            const conn = getConnection();
+
+            const signatures = await conn.getSignaturesForAddress(publicKey, { limit: 100 });
+
+            if (!signatures || signatures.length === 0) {
+                await CacheService.set(cacheKey, [], 0);
+                return [];
             }
 
-            const baseUrl = `https://api-devnet.helius-rpc.com/v0/addresses/${address}/transactions/?api-key=${heliusApiKey}`;
-            
-            let url = baseUrl;
-            let lastSignature: string | null = null;
-            let allTransactions: any[] = [];
-
-            while (allTransactions.length < 100) {
-                if (lastSignature) {
-                    url = baseUrl + `&before=${lastSignature}`;
+            const transactionPromises = signatures.map(async (sig) => {
+                try {
+                    const tx = await conn.getParsedTransaction(sig.signature, {
+                        maxSupportedTransactionVersion: 0
+                    });
+                    return tx;
+                } catch (error) {
+                    console.error(`Error fetching transaction ${sig.signature}:`, error);
+                    return null;
                 }
+            });
 
-                const response = await fetch(url);
+            const transactions = await Promise.all(transactionPromises);
+            const validTransactions = transactions.filter(tx => tx !== null);
 
-                if (!response.ok) {
-                    console.error(`Helius API error: ${response.status}`);
-                    const errorText = await response.text();
-                    console.error('Error response:', errorText);
-                    break;
-                }
-
-                const transactions = await response.json() as any[];
-
-                if (transactions && transactions.length > 0) {
-                    allTransactions = [...allTransactions, ...transactions];
-                    lastSignature = transactions[transactions.length - 1].signature;
-
-                    if (allTransactions.length >= 100) {
-                        allTransactions = allTransactions.slice(0, 100);
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            // Transform Helius transactions to RawTransaction format
-            const rawTransactions = allTransactions.map((tx) => parseHeliusTransaction(tx, address));
+            const rawTransactions = validTransactions.map((tx) => parseHeliusTransaction(tx, address));
 
             await CacheService.set(cacheKey, rawTransactions, 0);
             return rawTransactions.slice(0, limit);

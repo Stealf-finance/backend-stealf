@@ -4,7 +4,7 @@ import { User } from '../../models/User';
 
 class HeliusWebhookManager {
     private helius;
-    private webhookConfigId = 'helius-solana-devnet';
+    private webhookConfigId = 'helius-solana-mainnet';
 
     constructor() {
         this.helius = createHelius({
@@ -21,7 +21,6 @@ class HeliusWebhookManager {
             if (config){
                 console.log('Webhook config found in DB:', config.webhookId);
 
-                // Check if URL has changed
                 if (config.url !== fullWebhookUrl) {
                     console.log(`⚠️  Webhook URL has changed!`);
                     console.log(`   Old: ${config.url}`);
@@ -54,7 +53,7 @@ class HeliusWebhookManager {
             config = await WebhookHelius.create({
                 _id: this.webhookConfigId,
                 provider: 'helius',
-                network: 'solana-devnet',
+                network: 'solana-mainnet',
                 webhookId: webhook.webhookID,
                 url: fullWebhookUrl,
                 accountCount: wallets.length,
@@ -87,7 +86,7 @@ class HeliusWebhookManager {
                 return;
             }
 
-            const baseUrl = 'https://api-devnet.helius-rpc.com';
+            const baseUrl = 'https://mainnet.helius-rpc.com';
             const getUrl = `${baseUrl}/v0/webhooks/${config.webhookId}?api-key=${process.env.HELIUS_API_KEY}`;
 
             const getResponse = await fetch(getUrl);

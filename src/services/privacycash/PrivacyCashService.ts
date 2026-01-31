@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getPrivacyCashClient, calculateWithdrawalFee, SUPPORTED_TOKENS } from '../../config/privacyCash';
 
 export interface DepositResult {
@@ -27,8 +27,10 @@ export class PrivacyCashService {
         try {
             console.log(`[PrivacyCash] Depositing ${amount} SOL`);
 
+            const amountInLamports = Math.floor(amount * LAMPORTS_PER_SOL);
+
             const result = await this.client.deposit({
-                lamports: amount,
+                lamports: amountInLamports,
             });
 
             return {
@@ -68,8 +70,10 @@ export class PrivacyCashService {
 
             const fee = calculateWithdrawalFee(amount);
 
+            const amountInLamports = Math.floor(amount * LAMPORTS_PER_SOL);
+
             const result = await this.client.withdraw({
-                lamports: amount,
+                lamports: amountInLamports,
                 recipientAddress: recipientAddress,
             });
 

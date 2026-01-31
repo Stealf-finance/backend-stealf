@@ -30,7 +30,7 @@ export const getPrivacyCashClient = (): PrivacyCash => {
         privacyCashClient = new PrivacyCash({
             RPC_url: process.env.SOLANA_RPC_URL,
             owner: privateKey,
-            enableDebug: process.env.NODE_ENV === 'development',
+            enableDebug: false, // Disable verbose Privacy Cash logs
         });
     }
     return privacyCashClient;

@@ -9,7 +9,7 @@ import { calculateWithdrawalFee } from '../../config/privacyCash';
 import { getSocketService } from '../socket/socketService';
 
 export interface InitiateWithdrawParams {
-    userId: string;
+    walletID: string;
     recipient: string;
     amount: number;
     tokenMint?: string;
@@ -38,35 +38,37 @@ export class PrivacyWithdrawService {
      * Initiate and execute a private withdrawal
      */
     async initiateWithdraw(params: InitiateWithdrawParams): Promise<WithdrawStatus> {
-        const { userId, recipient, amount, tokenMint } = params;
+        const { walletID, recipient, amount, tokenMint } = params;
 
-        // 1. Get user
-        const user = await User.findById(userId);
+        console.log('[PrivacyWithdraw] Looking for user with cash_wallet:', walletID);
+
+        const user = await User.findOne({ cash_wallet: walletID });
         if (!user) {
+            console.error('[PrivacyWithdraw] User not found with cash_wallet:', walletID);
             throw new Error('User not found');
         }
 
-        // 2. Check if token is supported
+        console.log('[PrivacyWithdraw] User found:', user._id);
+
+        const userId = user._id.toString();
+
         if (!privacyCashService.isTokenSupported(tokenMint)) {
             throw new Error(`Token ${tokenMint} is not supported. Supported tokens: SOL, USDC`);
         }
 
-        // 3. Calculate fee
         const fee = calculateWithdrawalFee(amount);
         const totalRequired = amount + fee;
 
-        // 4. Check user's private balance (not global Privacy Cash balance)
         const userBalance = await privacyBalanceService.getBalance(userId, tokenMint);
 
         if (userBalance < totalRequired) {
             throw new Error(`Insufficient balance. Required: ${totalRequired} (${amount} + ${fee} fee), Available: ${userBalance}`);
         }
 
-        // 6. Create withdraw record
         const reference = randomUUID();
 
         const withdraw = new PrivateWithdraw({
-            userId: new mongoose.Types.ObjectId(userId),
+            userId: user._id,
             reference,
             sourceWallet: user.stealf_wallet,
             destinationWallet: recipient,

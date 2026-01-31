@@ -30,7 +30,7 @@ export class PrivateTransferController {
                 userId,
                 fromAddress: validatedData.fromAddress,
                 amount: validatedData.amount,
-                tokenMint: validatedData.tokenMint,
+                tokenMint: validatedData.tokenMint || undefined,
             });
 
             return res.status(201).json({
@@ -67,10 +67,9 @@ export class PrivateTransferController {
     static async initiatePrivateWithdraw(req: Request, res: Response, next: NextFunction) {
         try {
             const validatedData = initiatePrivateTransferSchema.parse(req.body);
-            const userId = (req as any).user?.mongoUserId;
 
-            if (!userId) {
-                return res.status(401).json({ error: 'User not authenticated' });
+            if (!validatedData.walletID) {
+                return res.status(400).json({ error: 'walletID is required' });
             }
 
             if (!validatedData.destinationWallet) {
@@ -78,10 +77,10 @@ export class PrivateTransferController {
             }
 
             const withdraw = await privacyWithdrawService.initiateWithdraw({
-                userId,
+                walletID: validatedData.walletID,
                 recipient: validatedData.destinationWallet,
                 amount: validatedData.amount,
-                tokenMint: validatedData.tokenMint,
+                tokenMint: validatedData.tokenMint || undefined,
             });
 
             return res.status(201).json({
@@ -121,11 +120,9 @@ export class PrivateTransferController {
 
             getTransferStatusSchema.parse({ transferId });
 
-            // Try to find in deposits first
             let transfer = await PrivateDeposit.findById(transferId);
             let type = 'deposit';
 
-            // If not found, try withdraws
             if (!transfer) {
                 transfer = await PrivateWithdraw.findById(transferId);
                 type = 'withdraw';
@@ -138,7 +135,6 @@ export class PrivateTransferController {
                 });
             }
 
-            // Verify transfer belongs to user
             if (transfer.userId.toString() !== userId) {
                 return res.status(403).json({
                     success: false,

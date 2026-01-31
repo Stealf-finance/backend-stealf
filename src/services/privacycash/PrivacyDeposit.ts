@@ -133,7 +133,6 @@ export class PrivacyDepositService {
         console.log(`[PrivacyDeposit] Executing deposit for ${deposit._id}`);
 
         try {
-            // Step 1: Mark as submitted
             deposit.status = 'deposit_submitted';
             await deposit.save();
             this.notifyDepositUpdate(deposit);
@@ -147,7 +146,6 @@ export class PrivacyDepositService {
                 depositResult = await privacyCashService.depositSOL(deposit.amount);
             }
 
-            // Step 2: Mark as deposited
             deposit.privacyCashDepositTx = depositResult.tx;
             deposit.status = 'deposited';
             await deposit.save();
@@ -155,12 +153,14 @@ export class PrivacyDepositService {
             console.log(`[PrivacyDeposit] Deposit completed: ${depositResult.tx}`);
             this.notifyDepositUpdate(deposit);
 
-            // Update user's private balance
             await privacyBalanceService.addBalance(
                 deposit.userId.toString(),
                 deposit.amount,
                 deposit.tokenMint || undefined
             );
+
+            const updatedBalances = await privacyBalanceService.getAllBalances(deposit.userId.toString());
+            this.socketService.emitPrivateBalanceUpdate(deposit.userId.toString(), updatedBalances);
 
         } catch (error) {
             console.error(`[PrivacyDeposit] Deposit failed for ${deposit._id}:`, error);
@@ -186,7 +186,6 @@ export class PrivacyDepositService {
             const signature = transaction.signature;
             const amount = tokenMint ? transfer.tokenAmount : transfer.amount / LAMPORTS_PER_SOL;
 
-            // Check if we already processed this transaction (Helius sends duplicates)
             const existingDeposit = await PrivateDeposit.findOne({ vaultDepositTx: signature });
             if (existingDeposit) {
                 console.log(`[PrivacyDeposit] Transaction ${signature} already processed for deposit ${existingDeposit._id}, skipping`);

@@ -7,6 +7,8 @@ import { transferCorrelationService, WebhookTransactionData } from '../privacyca
 import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
 
 export class TransactionHandler {
+    private static processedTransactions = new Set<string>();
+
     private static getVaultAddress(): string {
         const address = process.env.VAULT_PUBLIC_KEY;
         if (!address) {
@@ -29,9 +31,15 @@ export class TransactionHandler {
                     continue;
                 }
 
+                const signature = transaction.signature;
+                if (this.processedTransactions.has(signature)) {
+                    console.log(`[TransactionHandler] Transaction ${signature} already processed, skipping`);
+                    continue;
+                }
+                this.processedTransactions.add(signature);
+
                 const affectedWallets = new Set<string>();
 
-                // Check for privacy cash vault deposits (SOL transfers)
                 if (transaction.nativeTransfers && transaction.nativeTransfers.length > 0){
                     console.log(`[TransactionHandler] Found ${transaction.nativeTransfers.length} native transfer(s)`);
                     for (const transfer of transaction.nativeTransfers){
@@ -40,7 +48,6 @@ export class TransactionHandler {
                         console.log(`[TransactionHandler] Vault address: ${VAULT_ADDRESS}`);
                         console.log(`[TransactionHandler] Is vault deposit? ${toUserAccount === VAULT_ADDRESS}`);
 
-                        // Detect vault deposit for privacy cash
                         if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
                             console.log('[TransactionHandler] 🎯 Vault deposit detected! Calling handleVaultDeposit...');
                             await handleVaultDeposit(transaction, transfer);

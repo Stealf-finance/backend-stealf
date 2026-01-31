@@ -157,7 +157,6 @@ export class UserController {
             const { userId } = req.params;
 
             const user = await User.findOne({ cash_wallet: userId });
-
             if (!user){
                 return res.status(404).json({ error: 'User not found '});
             }
@@ -175,7 +174,7 @@ export class UserController {
                         cash_wallet: user.cash_wallet,
                         stealf_wallet: user.stealf_wallet,
                         status: user.status,
-                    },
+                    }
                 },
             });
         } catch (error) {

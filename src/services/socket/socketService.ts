@@ -89,6 +89,21 @@ class SocketService {
             timestamp: new Date().toISOString()
         });
     }
+
+    emitPrivateBalanceUpdate(userId: string, balances: {
+        sol: number;
+        usdc: number;
+    }) {
+        if (!this.io) {
+            console.warn('Socket.io not initialized');
+            return;
+        }
+
+        this.io.to(`user:${userId}`).emit('private-balance:updated', {
+            balances,
+            timestamp: new Date().toISOString()
+        });
+    }
 }
 
 let instance: SocketService | null = null;

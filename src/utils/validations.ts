@@ -15,6 +15,10 @@ export const checkAvailabilitySchema = z.object({
 const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export const initiatePrivateTransferSchema = z.object({
+    walletID: z.string()
+        .regex(solanaAddressRegex, 'Invalid Solana address format')
+        .length(44, 'Solana address must be 44 characters')
+        .optional(),
     fromAddress: z.string()
         .regex(solanaAddressRegex, 'Invalid Solana address format')
         .length(44, 'Solana address must be 44 characters')
@@ -29,7 +33,8 @@ export const initiatePrivateTransferSchema = z.object({
     tokenMint: z.string()
         .regex(solanaAddressRegex, 'Invalid token mint address')
         .length(44, 'Token mint address must be 44 characters')
-        .optional(),
+        .optional()
+        .nullable(),
 });
 
 export const getTransferStatusSchema = z.object({

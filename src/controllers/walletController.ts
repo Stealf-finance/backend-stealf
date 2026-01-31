@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
+import { User } from '../models/User';
 import { solanaService } from '../services/helius/walletInit';
 import { parseTransactions } from '../services/wallet/transactionParser';
 import { SolPriceService } from '../services/pricing/solPrice';
+import { privacyBalanceService } from '../services/privacycash/PrivacyBalanceService';
+
 export class WalletController {
-    
     /**
      * GET /api/wallet/walletInfos/:address?limit=10)
      */
@@ -49,5 +51,28 @@ export class WalletController {
         }
     }
 
+    static async getPrivateBalance(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { cash_wallet } = req.params;
 
+            const user = await User.findOne({ cash_wallet: cash_wallet });
+            if (!user){
+                return res.status(404).json({ error: 'User not found '});
+            }
+
+            const privateBalances = await privacyBalanceService.getAllBalances(user._id.toString());
+
+            return res.json({
+                success: true,
+                data: {
+                    privateBalance: {
+                        sol: privateBalances.sol,
+                        usdc: privateBalances.usdc,
+                    },
+                },
+            });
+        } catch (error){
+            next(error);
+        }
+    }
 }
