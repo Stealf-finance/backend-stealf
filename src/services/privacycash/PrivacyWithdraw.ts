@@ -1,12 +1,10 @@
-
-import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
-import { PrivateWithdraw, IPrivateWithdraw } from '../../models/PrivateWithdraw';
 import { User } from '../../models/User';
 import { privacyCashService } from './PrivacyCashService';
 import { privacyBalanceService } from './PrivacyBalanceService';
 import { calculateWithdrawalFee } from '../../config/privacyCash';
 import { getSocketService } from '../socket/socketService';
+import { CacheService } from '../cache/cacheService';
 
 export interface InitiateWithdrawParams {
     walletID: string;
@@ -31,8 +29,30 @@ export interface WithdrawStatus {
     updatedAt: Date;
 }
 
+interface CachedWithdraw {
+    withdrawId: string;
+    userId: string;
+    reference: string;
+    sourceWallet: string;
+    destinationWallet: string;
+    amount: number;
+    tokenMint: string | null;
+    fee: number;
+    status: string;
+    retryCount: number;
+    privacyCashWithdrawTx?: string;
+    errorMessage?: string;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 export class PrivacyWithdrawService {
     private socketService = getSocketService();
+    private readonly CACHE_TTL = 600;
+
+    private getCacheKey(reference: string): string {
+        return `withdraw:${reference}`;
+    }
 
     /**
      * Initiate and execute a private withdrawal
@@ -66,9 +86,12 @@ export class PrivacyWithdrawService {
         }
 
         const reference = randomUUID();
+        const withdrawId = randomUUID();
+        const now = new Date();
 
-        const withdraw = new PrivateWithdraw({
-            userId: user._id,
+        const withdraw: CachedWithdraw = {
+            withdrawId,
+            userId,
             reference,
             sourceWallet: user.stealf_wallet,
             destinationWallet: recipient,
@@ -77,61 +100,73 @@ export class PrivacyWithdrawService {
             fee,
             status: 'withdraw_submitted',
             retryCount: 0,
-        });
+            createdAt: now,
+            updatedAt: now,
+        };
 
-        await withdraw.save();
+        await CacheService.set(this.getCacheKey(reference), withdraw, this.CACHE_TTL);
 
-        console.log(`[PrivacyWithdraw] Withdraw ${withdraw._id} initiated for user ${userId}`);
+        console.log(`[PrivacyWithdraw] Withdraw ${withdrawId} initiated for user ${userId}`);
 
-        // 7. Execute withdrawal
-        await this.executeWithdraw(withdraw, recipient, fee);
+        await this.executeWithdraw(withdraw);
 
-        return this.formatWithdrawStatus(withdraw, fee);
+        return this.formatWithdrawStatus(withdraw);
     }
 
     /**
      * Execute Privacy Cash withdrawal
      */
-    private async executeWithdraw(withdraw: IPrivateWithdraw, recipient: string, fee: number): Promise<void> {
-        console.log(`[PrivacyWithdraw] Executing withdraw for ${withdraw._id}`);
+    private async executeWithdraw(withdraw: CachedWithdraw): Promise<void> {
+        console.log(`[PrivacyWithdraw] Executing withdraw for ${withdraw.withdrawId}`);
 
         try {
             // Mark as submitted
             withdraw.status = 'withdraw_submitted';
-            await withdraw.save();
+            withdraw.updatedAt = new Date();
+            await CacheService.set(this.getCacheKey(withdraw.reference), withdraw, this.CACHE_TTL);
             this.notifyWithdrawUpdate(withdraw);
 
             const mintPubKey = privacyCashService.getTokenMintPublicKey(withdraw.tokenMint || undefined);
 
             let withdrawResult;
             if (mintPubKey) {
-                withdrawResult = await privacyCashService.withdrawSPL(mintPubKey, withdraw.amount, recipient);
+                withdrawResult = await privacyCashService.withdrawSPL(mintPubKey, withdraw.amount, withdraw.destinationWallet);
             } else {
-                withdrawResult = await privacyCashService.withdrawSOL(withdraw.amount, recipient);
+                withdrawResult = await privacyCashService.withdrawSOL(withdraw.amount, withdraw.destinationWallet);
             }
 
             // Mark as withdrawn
             withdraw.privacyCashWithdrawTx = withdrawResult.tx;
             withdraw.status = 'withdrawn';
-            await withdraw.save();
+            withdraw.updatedAt = new Date();
+            await CacheService.set(this.getCacheKey(withdraw.reference), withdraw, this.CACHE_TTL);
 
             console.log(`[PrivacyWithdraw] Withdraw completed: ${withdrawResult.tx}`);
             this.notifyWithdrawUpdate(withdraw);
 
             // Subtract balance (amount + fee) from user's private balance
             await privacyBalanceService.subtractBalance(
-                withdraw.userId.toString(),
+                withdraw.userId,
                 withdraw.amount + withdraw.fee,
                 withdraw.tokenMint || undefined
             );
 
+            // Emit updated balance via socket
+            const updatedBalances = await privacyBalanceService.getAllBalances(withdraw.userId);
+            this.socketService.emitPrivateBalanceUpdate(withdraw.userId, updatedBalances);
+
+            // Clean cache after successful completion
+            await CacheService.del(this.getCacheKey(withdraw.reference));
+            console.log(`[PrivacyWithdraw] Cache cleaned for withdraw ${withdraw.withdrawId}`);
+
         } catch (error) {
-            console.error(`[PrivacyWithdraw] Withdraw failed for ${withdraw._id}:`, error);
+            console.error(`[PrivacyWithdraw] Withdraw failed for ${withdraw.withdrawId}:`, error);
 
             withdraw.status = 'failed';
             withdraw.errorMessage = error instanceof Error ? error.message : 'Unknown error';
             withdraw.retryCount += 1;
-            await withdraw.save();
+            withdraw.updatedAt = new Date();
+            await CacheService.set(this.getCacheKey(withdraw.reference), withdraw, this.CACHE_TTL);
 
             this.notifyWithdrawUpdate(withdraw);
 
@@ -139,15 +174,15 @@ export class PrivacyWithdrawService {
         }
     }
 
-    private formatWithdrawStatus(withdraw: IPrivateWithdraw, fee: number): WithdrawStatus {
+    private formatWithdrawStatus(withdraw: CachedWithdraw): WithdrawStatus {
         return {
-            withdrawId: withdraw._id.toString(),
+            withdrawId: withdraw.withdrawId,
             reference: withdraw.reference,
             status: withdraw.status,
-            recipient: withdraw.destinationWallet || '',
+            recipient: withdraw.destinationWallet,
             amount: withdraw.amount,
             tokenMint: withdraw.tokenMint || undefined,
-            fee,
+            fee: withdraw.fee,
             transactions: {
                 privacyCashWithdrawTx: withdraw.privacyCashWithdrawTx,
             },
@@ -157,9 +192,9 @@ export class PrivacyWithdrawService {
         };
     }
 
-    private notifyWithdrawUpdate(withdraw: IPrivateWithdraw): void {
-        this.socketService.emitPrivateTransferUpdate(withdraw.userId.toString(), {
-            transferId: withdraw._id.toString(),
+    private notifyWithdrawUpdate(withdraw: CachedWithdraw): void {
+        this.socketService.emitPrivateTransferUpdate(withdraw.userId, {
+            transferId: withdraw.withdrawId,
             status: withdraw.status,
             amount: withdraw.amount,
             tokenMint: withdraw.tokenMint || undefined,

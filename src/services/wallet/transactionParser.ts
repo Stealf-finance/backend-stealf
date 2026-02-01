@@ -3,7 +3,11 @@ import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 export interface Transaction {
     signature: string;
+    amount: number;
     amountUSD: number;
+    tokenMint: string | null;
+    tokenSymbol: string; 
+    tokenDecimals: number;
     signatureURL: string;
     walletAddress: string;
     dateFormatted: string;
@@ -17,6 +21,9 @@ export interface RawTransaction {
     date: Date | null;
     status: string;
     amount: number;
+    tokenMint: string | null; // null = SOL natif
+    tokenSymbol: string;
+    tokenDecimals: number;
     recipient: string | null;
     sender: string | null;
     type: 'sent' | 'received' | 'unknown';
@@ -79,6 +86,9 @@ export function parseHeliusTransaction(tx: any, walletAddress: string): RawTrans
     let type: 'sent' | 'received' | 'unknown' = 'unknown';
     let sender = tx.feePayer || '';
     let recipient = '';
+    let tokenMint: string | null = null;
+    let tokenSymbol = 'SOL';
+    let tokenDecimals = 9;
 
     // Check for native SOL transfers
     if (tx.nativeTransfers && tx.nativeTransfers.length > 0) {
@@ -90,14 +100,33 @@ export function parseHeliusTransaction(tx: any, walletAddress: string): RawTrans
         type = transfer.fromUserAccount === walletAddress ? 'sent' : 'received';
         sender = transfer.fromUserAccount;
         recipient = transfer.toUserAccount;
+        tokenMint = null; // SOL natif
+        tokenSymbol = 'SOL';
+        tokenDecimals = 9;
 
     // Check for SPL token transfers
     } else if (tx.tokenTransfers && tx.tokenTransfers.length > 0) {
-        const transfer = tx.tokenTransfers[0];
+        const transfer = tx.tokenTransfers.find(
+            (t: any) => t.fromUserAccount === walletAddress || t.toUserAccount === walletAddress
+        ) || tx.tokenTransfers[0];
+
         amount = transfer.tokenAmount || 0;
         type = transfer.fromUserAccount === walletAddress ? 'sent' : 'received';
         sender = transfer.fromUserAccount;
         recipient = transfer.toUserAccount;
+        tokenMint = transfer.mint || null;
+
+        // Map common token mints to symbols
+        if (tokenMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') {
+            tokenSymbol = 'USDC';
+            tokenDecimals = 6;
+        } else if (tokenMint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') {
+            tokenSymbol = 'USDT';
+            tokenDecimals = 6;
+        } else {
+            tokenSymbol = transfer.symbol || 'UNKNOWN';
+            tokenDecimals = transfer.decimals || 9;
+        }
     }
 
     return {
@@ -105,6 +134,9 @@ export function parseHeliusTransaction(tx: any, walletAddress: string): RawTrans
         date: tx.timestamp ? new Date(tx.timestamp * 1000) : null,
         status: tx.err ? 'failed' : 'success',
         amount,
+        tokenMint,
+        tokenSymbol,
+        tokenDecimals,
         type,
         sender,
         recipient,
@@ -121,12 +153,26 @@ export async function parseTransactions(
     const solPrice = await SolPriceService.getSolanaPrice();
 
     const parsedTransactions: Transaction[] = RawTransactions.map((tx) => {
-    const amountUSD = tx.amount * solPrice;
+        let amountUSD = 0;
+
+        // Calculer le prix USD selon le token
+        if (tx.tokenSymbol === 'SOL') {
+            amountUSD = tx.amount * solPrice;
+        } else if (tx.tokenSymbol === 'USDC' || tx.tokenSymbol === 'USDT') {
+            amountUSD = tx.amount;
+        } else {
+            // Pour les autres tokens, on n'a pas le prix (pourrait être ajouté plus tard)
+            amountUSD = 0;
+        }
 
         return {
             signature: tx.signature,
+            amount: tx.amount,
             amountUSD: amountUSD,
-            signatureURL: getExplorerUrl(tx.signature, "devnet"),
+            tokenMint: tx.tokenMint,
+            tokenSymbol: tx.tokenSymbol,
+            tokenDecimals: tx.tokenDecimals,
+            signatureURL: getExplorerUrl(tx.signature, "mainnet-beta"),
             walletAddress: walletAddress,
             dateFormatted: formatDate(tx.date),
             status: tx.status || 'unknown',
@@ -144,6 +190,52 @@ export function filterTransactionsByType(
 ): Transaction[] {
     if (type === 'all') return transactions;
     return transactions.filter(tx => tx.type === type);
+}
 
+/**
+ * Filter transactions by token mint address
+ * @param transactions - Array of transactions
+ * @param tokenMint - Token mint address (null for SOL)
+ * @returns Filtered array of transactions
+ */
+export function filterTransactionsByToken(
+    transactions: Transaction[],
+    tokenMint: string | null
+): Transaction[] {
+    return transactions.filter(tx => tx.tokenMint === tokenMint);
+}
+
+/**
+ * Filter transactions by token symbol
+ * @param transactions - Array of transactions
+ * @param tokenSymbol - Token symbol (e.g., 'SOL', 'USDC', 'USDT')
+ * @returns Filtered array of transactions
+ */
+export function filterTransactionsBySymbol(
+    transactions: Transaction[],
+    tokenSymbol: string
+): Transaction[] {
+    return transactions.filter(tx => tx.tokenSymbol === tokenSymbol);
+}
+
+/**
+ * Group transactions by token mint address
+ * @param transactions - Array of transactions
+ * @returns Map with tokenMint as key and array of transactions as value
+ */
+export function groupTransactionsByToken(
+    transactions: Transaction[]
+): Map<string | null, Transaction[]> {
+    const grouped = new Map<string | null, Transaction[]>();
+
+    for (const tx of transactions) {
+        const key = tx.tokenMint;
+        if (!grouped.has(key)) {
+            grouped.set(key, []);
+        }
+        grouped.get(key)!.push(tx);
+    }
+
+    return grouped;
 }
 

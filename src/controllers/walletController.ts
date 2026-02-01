@@ -35,9 +35,9 @@ export class WalletController {
         try {
             const address = req.params.address as string;
 
-            const balanceInSOL = await solanaService.getBalance(address);
-            const SolInUSD = await SolPriceService.getSolanaPrice();
-            const balance = balanceInSOL * SolInUSD;
+            const balance = await solanaService.getBalance(address);
+            // const SolInUSD = await SolPriceService.getSolanaPrice();
+            // const balance = balanceInSOL * SolInUSD;
 
             return res.status(200).json({
                 success: true,
@@ -53,15 +53,19 @@ export class WalletController {
 
     static async getPrivateBalance(req: Request, res: Response, next: NextFunction) {
         try {
-            const { cash_wallet } = req.params;
+            const { idWallet } = req.params;
 
-            const user = await User.findOne({ cash_wallet: cash_wallet });
+            console.log('[WalletController] Getting private balance for:', idWallet);
+            const user = await User.findOne({ cash_wallet: idWallet });
             if (!user){
-                return res.status(404).json({ error: 'User not found '});
+                console.error('[WalletController] User not found with cash_wallet:', idWallet);
+                return res.status(404).json({ error: 'User not found' });
             }
 
+            console.log('[WalletController] User found:', user._id);
             const privateBalances = await privacyBalanceService.getAllBalances(user._id.toString());
 
+            console.log('[WalletController] Private balances:', privateBalances);
             return res.json({
                 success: true,
                 data: {
@@ -72,6 +76,7 @@ export class WalletController {
                 },
             });
         } catch (error){
+            console.error('[WalletController] Error getting private balance:', error);
             next(error);
         }
     }

@@ -4,8 +4,6 @@ import { privacyDepositService } from '../services/privacycash/PrivacyDeposit'
 import { privacyWithdrawService } from '../services/privacycash/PrivacyWithdraw'
 import { privacyCashService } from '../services/privacycash/PrivacyCashService';
 import { privacyBalanceService } from '../services/privacycash/PrivacyBalanceService';
-import { PrivateDeposit } from '../models/PrivateDeposit';
-import { PrivateWithdraw } from '../models/PrivateWithdraw';
 import { initiatePrivateTransferSchema, getTransferStatusSchema, retryTransferSchema } from '../utils/validations';
 
 export class PrivateTransferController {
@@ -120,34 +118,9 @@ export class PrivateTransferController {
 
             getTransferStatusSchema.parse({ transferId });
 
-            let transfer = await PrivateDeposit.findById(transferId);
-            let type = 'deposit';
-
-            if (!transfer) {
-                transfer = await PrivateWithdraw.findById(transferId);
-                type = 'withdraw';
-            }
-
-            if (!transfer) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Transfer not found'
-                });
-            }
-
-            if (transfer.userId.toString() !== userId) {
-                return res.status(403).json({
-                    success: false,
-                    error: 'Unauthorized access to transfer'
-                });
-            }
-
-            return res.json({
-                success: true,
-                data: {
-                    transfer,
-                    type
-                },
+            return res.status(404).json({
+                success: false,
+                error: 'Transfer not found or already completed (cache-only storage for privacy)'
             });
         } catch (error) {
             if (error instanceof z.ZodError) {
@@ -177,33 +150,12 @@ export class PrivateTransferController {
                 return res.status(401).json({ error: 'User not authenticated' });
             }
 
-            const limit = parseInt(req.query.limit as string) || 10;
-
-            // Get deposits and withdraws
-            const deposits = await PrivateDeposit.find({ userId })
-                .sort({ createdAt: -1 })
-                .limit(limit)
-                .lean();
-
-            const withdraws = await PrivateWithdraw.find({ userId })
-                .sort({ createdAt: -1 })
-                .limit(limit)
-                .lean();
-
-            // Add type to each transfer
-            const depositsWithType = deposits.map(d => ({ ...d, type: 'deposit' }));
-            const withdrawsWithType = withdraws.map(w => ({ ...w, type: 'withdraw' }));
-
-            // Combine and sort by createdAt
-            const allTransfers = [...depositsWithType, ...withdrawsWithType]
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .slice(0, limit);
-
             return res.json({
                 success: true,
                 data: {
-                    transfers: allTransfers,
-                    count: allTransfers.length,
+                    transfers: [],
+                    count: 0,
+                    message: 'Transfer history not available (cache-only storage for privacy)'
                 },
             });
         } catch (error) {
@@ -282,45 +234,11 @@ export class PrivateTransferController {
 
             retryTransferSchema.parse({ transferId });
 
-            // Try to find in deposits first
-            let transfer = await PrivateDeposit.findById(transferId);
-            let type: 'deposit' | 'withdraw' = 'deposit';
-
-            // If not found, try withdraws
-            if (!transfer) {
-                transfer = await PrivateWithdraw.findById(transferId);
-                type = 'withdraw';
-            }
-
-            if (!transfer) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Transfer not found'
-                });
-            }
-
-            // Verify transfer belongs to user
-            if (transfer.userId.toString() !== userId) {
-                return res.status(403).json({
-                    success: false,
-                    error: 'Unauthorized access to transfer'
-                });
-            }
-
-            // Check if transfer is in failed status
-            if (transfer.status !== 'failed') {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Only failed transfers can be retried'
-                });
-            }
-
-            // TODO: Implement retry logic based on transfer type (deposit vs withdraw)
-            // For now, just return not implemented
+            // NOTE: With cache-only storage, cannot query by transferId
+            // Retry functionality not available with current privacy architecture
             return res.status(501).json({
                 success: false,
-                error: 'Retry functionality not yet implemented',
-                type
+                error: 'Retry functionality not available (cache-only storage for privacy)'
             });
 
         } catch (error) {

@@ -1,14 +1,12 @@
-
-import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
 import bs58 from 'bs58';
-import { PrivateDeposit, IPrivateDeposit } from '../../models/PrivateDeposit';
 import { User } from '../../models/User';
 import { transferCorrelationService } from './TransferCorrelationService';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { privacyCashService } from './PrivacyCashService';
 import { privacyBalanceService } from './PrivacyBalanceService';
 import { getSocketService } from '../socket/socketService';
+import { CacheService } from '../cache/cacheService';
 
 export interface WebhookTransactionData {
     signature: string;
@@ -43,6 +41,22 @@ export interface DepositStatus {
     updatedAt: Date;
 }
 
+interface CachedDeposit {
+    depositId: string;
+    userId: string;
+    reference: string;
+    sourceWallet: string;
+    amount: number;
+    tokenMint: string | null;
+    status: string;
+    retryCount: number;
+    vaultDepositTx?: string;
+    privacyCashDepositTx?: string;
+    errorMessage?: string;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 export class PrivacyDepositService {
     private get VAULT_ADDRESS(): string {
         const address = process.env.VAULT_PUBLIC_KEY;
@@ -53,9 +67,14 @@ export class PrivacyDepositService {
     }
 
     private socketService = getSocketService();
+    private readonly CACHE_TTL = 600;
+
+    private getCacheKey(reference: string): string {
+        return `deposit:${reference}`;
+    }
 
     /**
-     * Step 1: API initiates deposit (creates DB record)
+     * Step 1: API initiates deposit (stores in cache with 10min TTL)
      */
     async initiateDeposit(params: InitiateDepositParams): Promise<DepositStatus> {
         const { userId, fromAddress, amount, tokenMint } = params;
@@ -65,7 +84,6 @@ export class PrivacyDepositService {
             throw new Error('User not found');
         }
 
-        // Verify that fromAddress belongs to the user
         if (fromAddress !== user.cash_wallet && fromAddress !== user.stealf_wallet) {
             throw new Error('Invalid fromAddress: must be either your cash_wallet or stealf_wallet');
         }
@@ -75,34 +93,36 @@ export class PrivacyDepositService {
         }
 
         const reference = randomUUID();
+        const depositId = randomUUID();
+        const now = new Date();
 
-        const deposit = new PrivateDeposit({
-            userId: new mongoose.Types.ObjectId(userId),
+        const deposit: CachedDeposit = {
+            depositId,
+            userId,
             reference,
             sourceWallet: fromAddress,
             amount,
             tokenMint: tokenMint || null,
             status: 'pending_vault',
             retryCount: 0,
-        });
+            createdAt: now,
+            updatedAt: now,
+        };
 
-        await deposit.save();
+        await CacheService.set(this.getCacheKey(reference), deposit, this.CACHE_TTL);
 
-        console.log(`[PrivacyDeposit] Deposit ${deposit._id} initiated for user ${userId} from ${fromAddress}`);
+        console.log(`[PrivacyDeposit] Deposit ${depositId} initiated for user ${userId} from ${fromAddress}`);
 
-        return this.formatDepositStatus(deposit);
+        return this.formatCachedDepositStatus(deposit);
     }
 
     /**
      * Step 2: Webhook triggers this via TransferCorrelation
      */
     async processVaultDeposit(transactionSignature: string, reference: string): Promise<void> {
-        const deposit = await PrivateDeposit.findOne({
-            status: 'pending_vault',
-            reference,
-        });
+        const deposit = await CacheService.get<CachedDeposit>(this.getCacheKey(reference));
 
-        if (!deposit) {
+        if (!deposit || deposit.status !== 'pending_vault') {
             console.warn(`[PrivacyDeposit] No matching deposit found for reference ${reference} and tx ${transactionSignature}`);
             return;
         }
@@ -110,16 +130,18 @@ export class PrivacyDepositService {
         // Step 1: Mark as detected
         deposit.vaultDepositTx = transactionSignature;
         deposit.status = 'vault_tx_detected';
-        await deposit.save();
+        deposit.updatedAt = new Date();
+        await CacheService.set(this.getCacheKey(reference), deposit, this.CACHE_TTL);
 
-        console.log(`[PrivacyDeposit] Vault transaction detected for deposit ${deposit._id}`);
+        console.log(`[PrivacyDeposit] Vault transaction detected for deposit ${deposit.depositId}`);
         this.notifyDepositUpdate(deposit);
 
         // Step 2: Mark as received and verified
         deposit.status = 'vault_received';
-        await deposit.save();
+        deposit.updatedAt = new Date();
+        await CacheService.set(this.getCacheKey(reference), deposit, this.CACHE_TTL);
 
-        console.log(`[PrivacyDeposit] Vault deposit verified for deposit ${deposit._id}`);
+        console.log(`[PrivacyDeposit] Vault deposit verified for deposit ${deposit.depositId}`);
         this.notifyDepositUpdate(deposit);
 
         // Step 3: Execute Privacy Cash deposit
@@ -129,12 +151,13 @@ export class PrivacyDepositService {
     /**
      * Step 3: Execute Privacy Cash deposit
      */
-    private async executeDeposit(deposit: IPrivateDeposit): Promise<void> {
-        console.log(`[PrivacyDeposit] Executing deposit for ${deposit._id}`);
+    private async executeDeposit(deposit: CachedDeposit): Promise<void> {
+        console.log(`[PrivacyDeposit] Executing deposit for ${deposit.depositId}`);
 
         try {
             deposit.status = 'deposit_submitted';
-            await deposit.save();
+            deposit.updatedAt = new Date();
+            await CacheService.set(this.getCacheKey(deposit.reference), deposit, this.CACHE_TTL);
             this.notifyDepositUpdate(deposit);
 
             const mintPubKey = privacyCashService.getTokenMintPublicKey(deposit.tokenMint || undefined);
@@ -148,27 +171,32 @@ export class PrivacyDepositService {
 
             deposit.privacyCashDepositTx = depositResult.tx;
             deposit.status = 'deposited';
-            await deposit.save();
+            deposit.updatedAt = new Date();
+            await CacheService.set(this.getCacheKey(deposit.reference), deposit, this.CACHE_TTL);
 
             console.log(`[PrivacyDeposit] Deposit completed: ${depositResult.tx}`);
             this.notifyDepositUpdate(deposit);
 
             await privacyBalanceService.addBalance(
-                deposit.userId.toString(),
+                deposit.userId,
                 deposit.amount,
                 deposit.tokenMint || undefined
             );
 
-            const updatedBalances = await privacyBalanceService.getAllBalances(deposit.userId.toString());
-            this.socketService.emitPrivateBalanceUpdate(deposit.userId.toString(), updatedBalances);
+            const updatedBalances = await privacyBalanceService.getAllBalances(deposit.userId);
+            this.socketService.emitPrivateBalanceUpdate(deposit.userId, updatedBalances);
+
+            await CacheService.del(this.getCacheKey(deposit.reference));
+            console.log(`[PrivacyDeposit] Cache cleaned for deposit ${deposit.depositId}`);
 
         } catch (error) {
-            console.error(`[PrivacyDeposit] Deposit failed for ${deposit._id}:`, error);
+            console.error(`[PrivacyDeposit] Deposit failed for ${deposit.depositId}:`, error);
 
             deposit.status = 'failed';
             deposit.errorMessage = error instanceof Error ? error.message : 'Unknown error';
             deposit.retryCount += 1;
-            await deposit.save();
+            deposit.updatedAt = new Date();
+            await CacheService.set(this.getCacheKey(deposit.reference), deposit, this.CACHE_TTL);
 
             this.notifyDepositUpdate(deposit);
 
@@ -185,12 +213,6 @@ export class PrivacyDepositService {
 
             const signature = transaction.signature;
             const amount = tokenMint ? transfer.tokenAmount : transfer.amount / LAMPORTS_PER_SOL;
-
-            const existingDeposit = await PrivateDeposit.findOne({ vaultDepositTx: signature });
-            if (existingDeposit) {
-                console.log(`[PrivacyDeposit] Transaction ${signature} already processed for deposit ${existingDeposit._id}, skipping`);
-                return;
-            }
 
             let memo: string | undefined = undefined;
 
@@ -241,9 +263,9 @@ export class PrivacyDepositService {
         }
     }
 
-    private formatDepositStatus(deposit: IPrivateDeposit): DepositStatus {
+    private formatCachedDepositStatus(deposit: CachedDeposit): DepositStatus {
         return {
-            depositId: deposit._id.toString(),
+            depositId: deposit.depositId,
             reference: deposit.reference,
             status: deposit.status,
             vaultAddress: this.VAULT_ADDRESS,
@@ -259,9 +281,9 @@ export class PrivacyDepositService {
         };
     }
 
-    private notifyDepositUpdate(deposit: IPrivateDeposit): void {
-        this.socketService.emitPrivateTransferUpdate(deposit.userId.toString(), {
-            transferId: deposit._id.toString(),
+    private notifyDepositUpdate(deposit: CachedDeposit): void {
+        this.socketService.emitPrivateTransferUpdate(deposit.userId, {
+            transferId: deposit.depositId,
             status: deposit.status,
             amount: deposit.amount,
             tokenMint: deposit.tokenMint || undefined,

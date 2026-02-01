@@ -1,4 +1,4 @@
-import { PrivateDeposit } from '../../models/PrivateDeposit';
+import { CacheService } from '../cache/cacheService';
 
 export interface WebhookTransactionData {
     signature: string;
@@ -10,9 +10,28 @@ export interface WebhookTransactionData {
     timestamp: number;
 }
 
+interface CachedDeposit {
+    depositId: string;
+    userId: string;
+    reference: string;
+    sourceWallet: string;
+    amount: number;
+    tokenMint: string | null;
+    status: string;
+    retryCount: number;
+    vaultDepositTx?: string;
+    privacyCashDepositTx?: string;
+    errorMessage?: string;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 export class TransferCorrelationService {
     private readonly VAULT_ADDRESS = process.env.VAULT_PUBLIC_KEY!;
-    private readonly CORRELATION_TIME_WINDOW_MS = 20 * 60 * 1000; // 20 minutes
+
+    private getCacheKey(reference: string): string {
+        return `deposit:${reference}`;
+    }
 
     /**
      * Primary method: Correlate by memo/reference UUID
@@ -21,12 +40,9 @@ export class TransferCorrelationService {
         try {
             console.log(`[Correlation] Attempting correlation by reference: ${reference}`);
 
-            const transfer = await PrivateDeposit.findOne({
-                reference,
-                status: 'pending_vault',
-            });
+            const transfer = await CacheService.get<CachedDeposit>(this.getCacheKey(reference));
 
-            if (!transfer) {
+            if (!transfer || transfer.status !== 'pending_vault') {
                 console.warn(`[Correlation] No transfer found with reference: ${reference}`);
                 return false;
             }
@@ -47,7 +63,7 @@ export class TransferCorrelationService {
                 return false;
             }
 
-            console.log(`[Correlation] ✅ Transfer ${transfer._id} matched by reference ${reference}`);
+            console.log(`[Correlation] ✅ Transfer ${transfer.depositId} matched by reference ${reference}`);
 
             return true;
         } catch (error) {
@@ -58,36 +74,15 @@ export class TransferCorrelationService {
 
     /**
      * Fallback method: Correlate by transaction details (without memo)
+     *
+     * NOTE: With cache-only storage, cannot query by multiple fields.
+     * This fallback method is disabled for cache architecture.
      */
     async correlateByTransactionDetails(txData: WebhookTransactionData): Promise<boolean> {
         try {
-            console.log('[Correlation] Attempting fallback correlation by transaction details');
-
-            // Only process if it's a transaction TO the vault
-            if (txData.toUserAccount !== this.VAULT_ADDRESS) {
-                console.log('[Correlation] Transaction not to vault address, skipping');
-                return false;
-            }
-
-            const timeWindowStart = new Date(txData.timestamp - this.CORRELATION_TIME_WINDOW_MS);
-
-            // Find matching transfer by: from wallet, amount, tokenMint, time window
-            const transfer = await PrivateDeposit.findOne({
-                status: 'pending_vault',
-                sourceWallet: txData.fromUserAccount,
-                amount: txData.amount,
-                tokenMint: txData.tokenMint || null,
-                createdAt: { $gte: timeWindowStart },
-            }).sort({ createdAt: -1 });
-
-            if (!transfer) {
-                console.warn(`[Correlation] No matching transfer found for fallback correlation`);
-                console.warn(`[Correlation] Details: from=${txData.fromUserAccount}, amount=${txData.amount}, tokenMint=${txData.tokenMint}`);
-                return false;
-            }
-
-            console.log(`[Correlation] ✅ Deposit ${transfer._id} matched by transaction details (fallback)`);
-            return true;
+            console.log('[Correlation] Fallback correlation not available with cache-only storage');
+            console.warn('[Correlation] Transaction without memo cannot be correlated (privacy mode)');
+            return false;
         } catch (error) {
             console.error('[Correlation] Error in correlateByTransactionDetails:', error);
             return false;
