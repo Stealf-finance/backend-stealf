@@ -6,7 +6,7 @@ Private Solana transactions using zero-knowledge proofs. No transfer history is 
 
 1. User calls `POST /api/private-transfer/initiate` with amount, token, and source wallet
 2. A deposit record is created in cache (10min TTL) with a unique reference UUID
-3. User sends funds to the vault address with the reference as memo
+3. User sends funds to the Stealf vault  with the reference as memo
 4. Webhook detects the transaction — `TransferCorrelationService` matches it by memo + amount
 5. `PrivacyCashService.depositSOL()` or `depositSPL()` executes the private deposit
 6. User's private balance is updated and emitted via Socket.IO

@@ -21,14 +21,6 @@ class HeliusWebhookManager {
             if (config){
                 console.log('Webhook config found in DB:', config.webhookId);
 
-                if (config.url !== fullWebhookUrl) {
-                    console.log(`⚠️  Webhook URL has changed!`);
-                    console.log(`   Old: ${config.url}`);
-                    console.log(`   New: ${fullWebhookUrl}`);
-                    console.log(`   Please update the webhook URL manually in Helius dashboard`);
-                    console.log(`   Or delete the webhook and restart the server to create a new one`);
-                }
-
                 return config;
             }
 
