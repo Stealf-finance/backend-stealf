@@ -1,24 +1,72 @@
+# Stealf Backend
+
+Solana wallet backend with private transfers, real-time transaction tracking, and passwordless authentication.
+
+## Quick Start
+
+```bash
 npm install
-
-ngrok http 3000 pour recevoir les pushs d'helius (mise a jour balance/historique)
-
 npm run dev
 
-services :
+# For webhook reception (dev only)
+ngrok http 3000
+```
 
-- coingeko -> afficher le prix du sol en USD
-- redis -> systeme de cache
-- mongodb -> db -> trois documents :
-  - User -> infos users
-  - magiclinks -> stocke le token pour vérifier que le lien est bien correcte
-  - webhookshelius -> stocke l'id du webhook pour mettre a jour en temps réel les infos users
+## Architecture
 
-- socket.io -> service de socket qui relais les infos au frontend quand il en recoit (webhook helius).
-- magiclink -> envoie un lien unique a l'user pour vérifier son mail
-- helius -> fetch les infos users en temps réel
+```
+src/
+├── config/          — Environment & service configuration
+├── controllers/     — API route handlers
+├── middleware/      — Auth, rate limiting, error handling
+├── models/          — MongoDB schemas
+├── routes/          — Express route definitions
+├── services/        — Business logic (see below)
+├── types/           — TypeScript definitions
+└── utils/           — Validation schemas (Zod)
+```
 
+## Services
 
-middleware:
-  - gestion session turnkey -> a chaque appel on check si le jwt est bien signé par turnkey + expiration + on extrait le suborgid et on check si le user existe en db
-  - on check les entres lors de la connexion
-  - preAuth -> system de jwt direct gere par Stealf 
+| Service | Description |
+|---------|-------------|
+| **auth/** | User creation, magic link login, pre-auth verification |
+| **cache/** | Redis wrapper for balances, prices, transaction history |
+| **helius/** | Helius webhook management + wallet transaction fetching |
+| **pricing/** | SOL/USD price from CoinGecko with cache |
+| **privacycash/** | Private deposits & withdrawals via zero-knowledge proofs |
+| **socket/** | Socket.IO real-time updates (balances, transactions, transfers) |
+| **wallet/** | Transaction parsing, token mapping, USD pricing |
+
+## Controllers
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/auth/*` | Registration, session validation, email checks |
+| `GET /api/wallet/walletInfos/:address` | Wallet balance + transaction history |
+| `POST /api/private-transfer/initiate` | Initiate private deposit |
+| `POST /api/private-transfer/withdraw` | Initiate private withdrawal |
+| `GET /api/private-transfer/balance` | Get private balance |
+| `POST /api/helius/helius` | Helius webhook receiver |
+| `GET /api/users/sol-price` | Current SOL/USD price |
+| `GET /api/users/check-verification` | Magic link validation |
+
+## Models
+
+| Model | Purpose |
+|-------|---------|
+| **User** | Account info, Solana wallets (cash + stealf), Turnkey subOrg |
+| **PrivateBalance** | Private vault balance (SOL + USDC) per user |
+| **MagicLink** | One-time auth tokens for passwordless login |
+| **WebhookHelius** | Helius webhook registration metadata |
+
+## Middleware
+
+- **verifyAuth** — Validates Turnkey JWT, extracts subOrgId, checks user exists
+- **preAuth** — Stealf-managed JWT for pre-authentication flow
+- **rateLimiter** — API rate limiting
+- **socketAuth** — WebSocket authentication
+
+## Stack
+
+MongoDB · Redis · Express · Socket.IO · Helius SDK · Solana Web3.js · Turnkey · Zod
