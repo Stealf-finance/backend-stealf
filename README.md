@@ -1,24 +1,25 @@
 npm install
 
-ngrok http 3000 pour recevoir les pushs d'helius (mise a jour balance/historique)
+ngrok http 3000 to receive helius pushes (balance/history updates)
 
 npm run dev
 
-services :
+services:
 
-- coingeko -> afficher le prix du sol en USD
-- redis -> systeme de cache
-- mongodb -> db -> trois documents :
-  - User -> infos users
-  - magiclinks -> stocke le token pour vérifier que le lien est bien correcte
-  - webhookshelius -> stocke l'id du webhook pour mettre a jour en temps réel les infos users
+- coingeko -> display SOL price in USD
+- redis -> caching system
+- mongodb -> database with three collections:
+  - User -> user information
+  - magiclinks -> stores tokens to verify link validity
+  - webhookshelius -> stores webhook IDs to update user info in real-time
 
-- socket.io -> service de socket qui relais les infos au frontend quand il en recoit (webhook helius).
-- magiclink -> envoie un lien unique a l'user pour vérifier son mail
-- helius -> fetch les infos users en temps réel
+- socket.io -> socket service that relays information to frontend when received (helius webhook)
+- magiclink -> sends unique link to user to verify their email
+- helius -> fetches user info in real-time
+- arcium MPC -> on-chain encryption for user backup (email/pseudo) + private proof of balance. Added before Umbra integration to bring a first layer of confidentiality to sensitive user data via Multi-Party Computation
 
 
 middleware:
-  - gestion session turnkey -> a chaque appel on check si le jwt est bien signé par turnkey + expiration + on extrait le suborgid et on check si le user existe en db
-  - on check les entres lors de la connexion
-  - preAuth -> system de jwt direct gere par Stealf 
+  - turnkey session management -> on each call we check if JWT is properly signed by turnkey + expiration + extract suborgid and verify user exists in database
+  - input validation during connection
+  - preAuth -> JWT system directly managed by Stealf

@@ -1,0 +1,242 @@
+{
+  "address": "Er8Vc4spV5QrjmxBaF8Z9wTiCoGCKNz6GH66WYiSfUxC",
+  "metadata": {
+    "name": "stealf_arcium",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "encrypt_user_data",
+      "docs": [
+        "Initialize user data PDA with encrypted email and pseudo",
+        "NOTE: This will integrate with Arcis circuits once SDK is available"
+      ],
+      "discriminator": [
+        125,
+        90,
+        114,
+        244,
+        117,
+        93,
+        130,
+        123
+      ],
+      "accounts": [
+        {
+          "name": "user_data",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "encrypted_email",
+          "type": {
+            "array": [
+              "u8",
+              96
+            ]
+          }
+        },
+        {
+          "name": "encrypted_pseudo",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "verify_balance",
+      "docs": [
+        "Verify balance privately via MPC",
+        "NOTE: This will integrate with Arcis circuits once SDK is available"
+      ],
+      "discriminator": [
+        103,
+        97,
+        226,
+        53,
+        208,
+        60,
+        14,
+        136
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_encrypted_balance",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "minimum_required",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "UserData",
+      "discriminator": [
+        139,
+        248,
+        167,
+        203,
+        253,
+        220,
+        210,
+        221
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BalanceVerificationResult",
+      "discriminator": [
+        246,
+        63,
+        249,
+        34,
+        197,
+        172,
+        13,
+        124
+      ]
+    },
+    {
+      "name": "UserDataStored",
+      "discriminator": [
+        40,
+        91,
+        12,
+        214,
+        82,
+        202,
+        55,
+        140
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "BalanceVerificationResult",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_sufficient",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserData",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "encrypted_email",
+            "type": {
+              "array": [
+                "u8",
+                96
+              ]
+            }
+          },
+          {
+            "name": "encrypted_pseudo",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserDataStored",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "signature",
+            "type": "string"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}
