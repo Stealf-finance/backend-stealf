@@ -41,7 +41,7 @@ class SocketService {
 
     }
 
-    emitBalanceUpdate(walletAddress: string, balance: number) {
+    emitBalanceUpdate(walletAddress: string, walletBalance: { tokens: any[]; totalUSD: number }) {
         if (!this.io) {
             console.warn('Socket.io not initialized');
             return;
@@ -49,7 +49,8 @@ class SocketService {
 
         this.io.to(walletAddress).emit('balance:updated', {
             address: walletAddress,
-            balance,
+            tokens: walletBalance.tokens,
+            totalUSD: walletBalance.totalUSD,
             timestamp: new Date().toISOString()
         });
     }

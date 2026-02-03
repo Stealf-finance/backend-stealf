@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const checkAvailabilitySchema = z.object({
-    email: z.string().email('Invalid email format').optional(),
+    email: z.string().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email format').optional(),
     pseudo: z.string()
         .min(3, 'Pseudo must be at least 3 characters')
         .max(20, 'Pseudo must be max 20 characters')

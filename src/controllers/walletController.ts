@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import { solanaService } from '../services/helius/walletInit';
 import { parseTransactions } from '../services/wallet/transactionParser';
-import { SolPriceService } from '../services/pricing/solPrice';
+
 import { privacyBalanceService } from '../services/privacycash/PrivacyBalanceService';
 
 export class WalletController {
@@ -35,15 +35,14 @@ export class WalletController {
         try {
             const address = req.params.address as string;
 
-            const balance = await solanaService.getBalance(address);
-            // const SolInUSD = await SolPriceService.getSolanaPrice();
-            // const balance = balanceInSOL * SolInUSD;
+            const walletBalance = await solanaService.getBalance(address);
 
             return res.status(200).json({
                 success: true,
                 data: {
                     address,
-                    balance,
+                    tokens: walletBalance.tokens,
+                    totalUSD: walletBalance.totalUSD,
                 },
             });
         } catch (error) {

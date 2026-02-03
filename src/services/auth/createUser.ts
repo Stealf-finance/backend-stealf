@@ -4,7 +4,7 @@ import { privacyBalanceService } from '../privacycash/PrivacyBalanceService';
 
 export async function createUser(email: string, pseudo: string, cash_wallet: string, stealf_wallet: string, turnkey_subOrgId: string){
 
-    if (!email || !pseudo || !cash_wallet || !stealf_wallet){
+    if (!email || !pseudo || !cash_wallet){
         throw new Error('Missing user`s information!');
     }
 

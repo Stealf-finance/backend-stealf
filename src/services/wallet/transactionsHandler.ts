@@ -3,8 +3,9 @@ import { parseHeliusTransaction } from './transactionParser';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getSocketService } from '../socket/socketService';
 import { SolPriceService } from '../pricing/solPrice';
-import { transferCorrelationService, WebhookTransactionData } from '../privacycash/TransferCorrelationService';
+
 import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
+import { WalletBalance } from '../helius/walletInit';
 
 export class TransactionHandler {
     private static processedTransactions = new Set<string>();
@@ -81,12 +82,12 @@ export class TransactionHandler {
                         }
 
                         if (fromUserAccount){
-                            await this.updateWalletBalance(fromUserAccount, -tokenAmount);
+                            await this.updateWalletBalance(fromUserAccount, -tokenAmount, mint);
                             affectedWallets.add(fromUserAccount);
                         }
 
                         if (toUserAccount){
-                            await this.updateWalletBalance(toUserAccount, tokenAmount);
+                            await this.updateWalletBalance(toUserAccount, tokenAmount, mint);
                             affectedWallets.add(toUserAccount);
                         }
                     }
@@ -108,21 +109,48 @@ export class TransactionHandler {
     
     private static async updateWalletBalance(
         walletAddress: string,
-        delta: number
+        delta: number,
+        tokenMint: string | null = null
     ) {
         try {
             const balanceKey = CacheService.balanceKey(walletAddress);
-
-            const currentBalance = await CacheService.get<number>(balanceKey);
-
-            const newBalance = (currentBalance || 0) + delta;
-
-            await CacheService.set(balanceKey, newBalance, 0);
-
             const solPrice = await SolPriceService.getSolanaPrice();
-            const balanceUSD = newBalance * solPrice;
 
-            getSocketService().emitBalanceUpdate(walletAddress, balanceUSD);
+            let walletBalance = await CacheService.get<WalletBalance>(balanceKey);
+
+            if (!walletBalance) {
+                walletBalance = { tokens: [], totalUSD: 0 };
+            }
+
+            // Find or create token entry
+            let token = walletBalance.tokens.find(t => t.tokenMint === tokenMint);
+            if (!token) {
+                const symbol = tokenMint === null ? 'SOL'
+                    : tokenMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC'
+                    : tokenMint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' ? 'USDT'
+                    : 'UNKNOWN';
+                const decimals = tokenMint === null ? 9 : 6;
+                token = { tokenMint, tokenSymbol: symbol, tokenDecimals: decimals, balance: 0, balanceUSD: 0 };
+                walletBalance.tokens.push(token);
+            }
+
+            token.balance += delta;
+            if (token.balance < 0) token.balance = 0;
+
+            // Recalculate USD
+            if (token.tokenSymbol === 'SOL') {
+                token.balanceUSD = token.balance * solPrice;
+            } else if (token.tokenSymbol === 'USDC' || token.tokenSymbol === 'USDT') {
+                token.balanceUSD = token.balance;
+            } else {
+                token.balanceUSD = 0;
+            }
+
+            walletBalance.totalUSD = walletBalance.tokens.reduce((sum, t) => sum + t.balanceUSD, 0);
+
+            await CacheService.set(balanceKey, walletBalance, 0);
+
+            getSocketService().emitBalanceUpdate(walletAddress, walletBalance);
         } catch (error) {
             console.error(`Error updating balance for ${walletAddress}`, error);
             throw error;
