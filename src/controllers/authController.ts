@@ -11,7 +11,6 @@ import { PreAuthService } from '../services/auth/preAuthService';
 
 export class UserController {
 
-
     static async checkAvailability(req: Request, res: Response, next: NextFunction) {
 
         try {
@@ -103,6 +102,7 @@ export class UserController {
                 pseudo,
                 cash_wallet,
                 stealf_wallet,
+                coldWallet,
             } = req.body;
 
             if (!email || !pseudo || !cash_wallet || !stealf_wallet ){
@@ -126,7 +126,7 @@ export class UserController {
             const decoded = decodeSessionJwt(sessionJWT);
             const turnkey_subOrgId = decoded.organizationId;
 
-            const user = await createUser(email, pseudo, cash_wallet, stealf_wallet, turnkey_subOrgId);
+            const user = await createUser(email, pseudo, cash_wallet, stealf_wallet, turnkey_subOrgId, coldWallet);
 
             return res.status(201).json({
                 success: true,
@@ -137,6 +137,7 @@ export class UserController {
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
                         stealf_wallet: user.stealf_wallet,
+                        coldWallet: user.coldWallet,
                         status: user.status,
                     },
                 },
@@ -173,6 +174,7 @@ export class UserController {
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
                         stealf_wallet: user.stealf_wallet,
+                        coldWallet: user.coldWallet,
                         status: user.status,
                     }
                 },
