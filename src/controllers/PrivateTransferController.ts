@@ -65,17 +65,19 @@ export class PrivateTransferController {
     static async initiatePrivateWithdraw(req: Request, res: Response, next: NextFunction) {
         try {
             const validatedData = initiatePrivateTransferSchema.parse(req.body);
+            const userId = (req as any).user?.mongoUserId;
 
-            if (!validatedData.walletID) {
-                return res.status(400).json({ error: 'walletID is required' });
+            if (!userId) {
+                return res.status(401).json({ error: 'User not authenticated' });
             }
 
             if (!validatedData.destinationWallet) {
                 return res.status(400).json({ error: 'Destination wallet is required for withdrawal' });
             }
 
+            // SECURITY: Pass authenticated userId directly - service no longer queries by wallet
             const withdraw = await privacyWithdrawService.initiateWithdraw({
-                walletID: validatedData.walletID,
+                userId,
                 recipient: validatedData.destinationWallet,
                 amount: validatedData.amount,
                 tokenMint: validatedData.tokenMint || undefined,

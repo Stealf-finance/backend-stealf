@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import { createServer } from 'http';
+import path from 'path';
 import dotenv from 'dotenv';
 import userRoutes from './routes/userRoutes'
 import walletRoutes from './routes/walletRoutes';
@@ -8,20 +9,23 @@ import  webhookHeliusRoutes  from './routes/webhookHeliusRoutes'
 import privateTransferRoutes from './routes/privateTransferRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
-import { getSocketService } from './services/socket/socketService'; 
+import { getSocketService } from './services/socket/socketService';
 
 dotenv.config();
 
 const app = express();
 
 const httpServer = createServer(app);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// SECURITY: Limit request body size to prevent DoS
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // Serve Apple App Site Association file
+// SECURITY: Use relative path instead of hardcoded absolute path
 app.get('/.well-known/apple-app-site-association', (req, res) => {
   res.type('application/json');
-  res.sendFile('/Users/thomasgaugain/Documents/STEALF/v2-backend/public/.well-known/apple-app-site-association');
+  res.sendFile(path.join(__dirname, '../public/.well-known/apple-app-site-association'));
 });
 
 

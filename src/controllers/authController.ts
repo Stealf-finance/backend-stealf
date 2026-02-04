@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import { check, success, z } from 'zod';
-import { checkAvailabilitySchema } from '../utils/validations';
+import { checkAvailabilitySchema, authUserSchema } from '../utils/validations';
 import { verifySessionJwtSignature } from '@turnkey/crypto';
 import { is } from 'zod/v4/locales';
 import { decodeSessionJwt } from '../middleware/verifyAuth';
@@ -11,74 +11,78 @@ import { PreAuthService } from '../services/auth/preAuthService';
 
 export class UserController {
 
+    /**
+     * POST /api/users/check-availability
+     * Check if email/pseudo are available and initiate magic link flow
+     * SECURITY: Uses constant-time response to prevent timing-based enumeration
+     */
     static async checkAvailability(req: Request, res: Response, next: NextFunction) {
+        const startTime = Date.now();
+        const MIN_RESPONSE_TIME = 500;
 
         try {
             const { email, pseudo} = checkAvailabilitySchema.parse(req.body);
-            const delay = Math.floor(Math.random() * 100) + 200;
-
-            await new Promise(resolve => setTimeout(resolve, delay));
-
             const unavailable: number[] = [];
 
-            if (email && pseudo){
-                const userExists = await User.findOne({ email, pseudo });
-                if (userExists){
-                    return res.status(200).json({
-                        canProceed: false,
-                        unavailable
-                    });
-                }
+            // Always perform both lookups to prevent timing-based enumeration
+            const [emailExists, pseudoExists] = await Promise.all([
+                email ? User.findOne({ email }).lean() : Promise.resolve(null),
+                pseudo ? User.findOne({ pseudo }).lean() : Promise.resolve(null),
+            ]);
+
+            if (emailExists) {
+                unavailable.push(1);
             }
-            if (email) {
-                const emailExists = await User.findOne({ email });
-                if (emailExists){
-                    unavailable.push(1);
-                }
+            if (pseudoExists) {
+                unavailable.push(2);
             }
 
-            if (pseudo) {
-                const pseudoExists = await User.findOne({ pseudo });
-                if (pseudoExists){
-                    unavailable.push(2);
-                }
-            }
+            let responseData: any;
 
             if (unavailable.length === 0 && email && pseudo) {
                 try {
                     const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
-
                     await magicLinkService.sendMagicLink(email, pseudo);
 
-                    console.log('Magic link sent and pre-auth token created');
-
-                    return res.status(200).json({
+                    responseData = {
                         canProceed: true,
                         unavailable: [],
                         preAuthToken,
-                    });
+                    };
                 } catch (emailError) {
                     console.error('Failed to send magic link:', emailError);
-                    return res.status(200).json({
+                    responseData = {
                         canProceed: false,
                         unavailable: [],
-                    });
+                    };
                 }
+            } else {
+                responseData = {
+                    canProceed: false,
+                    unavailable
+                };
             }
 
-            return res.status(200).json({
-                canProceed: false,
-                unavailable
-            });
+            // Enforce minimum response time to normalize timing
+            const elapsed = Date.now() - startTime;
+            if (elapsed < MIN_RESPONSE_TIME) {
+                await new Promise(resolve => setTimeout(resolve, MIN_RESPONSE_TIME - elapsed));
+            }
+
+            return res.status(200).json(responseData);
 
         } catch (error) {
             if (error instanceof z.ZodError) {
-
                 const errors = error.issues.map(err => ({
                     field: err.path.join('.'),
                     message: err.message
                 }));
 
+                // Still enforce minimum time on errors
+                const elapsed = Date.now() - startTime;
+                if (elapsed < MIN_RESPONSE_TIME) {
+                    await new Promise(resolve => setTimeout(resolve, MIN_RESPONSE_TIME - elapsed));
+                }
 
                 return res.status(200).json({
                     canProceed: false,
@@ -88,7 +92,6 @@ export class UserController {
             }
             next(error);
         }
-        
     }
 
      /**
@@ -97,19 +100,9 @@ export class UserController {
      */
     static async authUser(req: Request, res: Response, next: NextFunction){
         try {
-            const {
-                email,
-                pseudo,
-                cash_wallet,
-                stealf_wallet,
-                coldWallet,
-            } = req.body;
-
-            if (!email || !pseudo || !cash_wallet || !stealf_wallet ){
-                return res.status(400).json({
-                    error: 'Missing required fields: email, pseudo, cash_wallet, stealf_wallet',
-                });
-            }
+            // SECURITY: Validate input with Zod schema
+            const validatedData = authUserSchema.parse(req.body);
+            const { email, pseudo, cash_wallet, stealf_wallet, coldWallet } = validatedData;
 
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')){
@@ -144,6 +137,18 @@ export class UserController {
             });
 
         } catch (error) {
+            if (error instanceof z.ZodError) {
+                const errors = error.issues.map(err => ({
+                    field: err.path.join('.'),
+                    message: err.message,
+                }));
+
+                return res.status(400).json({
+                    success: false,
+                    error: 'Validation failed',
+                    errors,
+                });
+            }
             next(error);
         }
         }

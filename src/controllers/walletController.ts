@@ -7,15 +7,38 @@ import { privacyBalanceService } from '../services/privacycash/PrivacyBalanceSer
 
 export class WalletController {
     /**
-     * GET /api/wallet/walletInfos/:address?limit=10)
+     * Verify that the requested address belongs to the authenticated user
+     */
+    private static async verifyWalletOwnership(req: Request, address: string): Promise<{ authorized: boolean; user?: any }> {
+        const mongoUserId = (req as any).user?.mongoUserId;
+        if (!mongoUserId) {
+            return { authorized: false };
+        }
+
+        const user = await User.findById(mongoUserId);
+        if (!user) {
+            return { authorized: false };
+        }
+
+        const isOwner = user.cash_wallet === address || user.stealf_wallet === address;
+        return { authorized: isOwner, user };
+    }
+
+    /**
+     * GET /api/wallet/history/:address?limit=10
      */
     static async getHistory(req: Request, res: Response, next: NextFunction) {
         try {
             const address = req.params.address as string;
-            const limit = parseInt(req.query.limit as string) || 10;
+            const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
+
+            // SECURITY: Verify wallet ownership
+            const { authorized } = await WalletController.verifyWalletOwnership(req, address);
+            if (!authorized) {
+                return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
+            }
 
             const rawTransactions = await solanaService.getTransactions(address, limit);
-
             const parsedTransactions = await parseTransactions(rawTransactions, address);
 
             return res.status(200).json({
@@ -31,9 +54,18 @@ export class WalletController {
         }
     }
 
+    /**
+     * GET /api/wallet/balance/:address
+     */
     static async getBalance(req: Request, res: Response, next: NextFunction) {
         try {
             const address = req.params.address as string;
+
+            // SECURITY: Verify wallet ownership
+            const { authorized } = await WalletController.verifyWalletOwnership(req, address);
+            if (!authorized) {
+                return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
+            }
 
             const walletBalance = await solanaService.getBalance(address);
 
@@ -50,21 +82,21 @@ export class WalletController {
         }
     }
 
+    /**
+     * GET /api/wallet/privacybalance/:idWallet
+     */
     static async getPrivateBalance(req: Request, res: Response, next: NextFunction) {
         try {
-            const { idWallet } = req.params;
+            const idWallet = req.params.idWallet as string;
 
-            console.log('[WalletController] Getting private balance for:', idWallet);
-            const user = await User.findOne({ cash_wallet: idWallet });
-            if (!user){
-                console.error('[WalletController] User not found with cash_wallet:', idWallet);
-                return res.status(404).json({ error: 'User not found' });
+            // SECURITY: Verify wallet ownership instead of looking up by wallet
+            const { authorized, user } = await WalletController.verifyWalletOwnership(req, idWallet);
+            if (!authorized || !user) {
+                return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
             }
 
-            console.log('[WalletController] User found:', user._id);
             const privateBalances = await privacyBalanceService.getAllBalances(user._id.toString());
 
-            console.log('[WalletController] Private balances:', privateBalances);
             return res.json({
                 success: true,
                 data: {
@@ -75,7 +107,6 @@ export class WalletController {
                 },
             });
         } catch (error){
-            console.error('[WalletController] Error getting private balance:', error);
             next(error);
         }
     }

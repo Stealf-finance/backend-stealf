@@ -1,19 +1,24 @@
 import { Request, Response, NextFunction } from 'express';
 
+// SECURITY: Default to production mode if NODE_ENV not explicitly set to 'development'
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 export const errorHandler = (
     error: Error,
     req: Request,
     res: Response,
     next: NextFunction
 ) => {
-    console.error('Error:', error);
+    // Log full error for debugging (server-side only)
+    console.error('Error:', isDevelopment ? error : error.message);
 
     if (error.name === 'MongoError' || error.name === 'MongoServerError') {
         const mongoError = error as any;
         if (mongoError.code === 11000) {
             return res.status(409).json({
                 error: 'Duplicate entry',
-                details: 'Email, pseudo, or sub-org already exists',
+                // SECURITY: Generic message - don't reveal which field is duplicate
+                details: 'A record with these details already exists',
             });
         }
     }
@@ -21,12 +26,14 @@ export const errorHandler = (
     if (error.name === 'ValidationError'){
         return res.status(400).json({
             error: 'Validation failed',
-            details: error.message,
+            // SECURITY: Only expose validation details in development
+            details: isDevelopment ? error.message : 'Invalid input data',
         });
     }
 
     return res.status(500).json({
         error: 'Internal server error',
-        message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        // SECURITY: Never expose internal error messages in production
+        ...(isDevelopment && { message: error.message }),
     });
 };
