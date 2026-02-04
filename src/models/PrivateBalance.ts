@@ -14,7 +14,6 @@ const privateBalanceSchema = new Schema<IPrivateBalance>({
         ref: 'User',
         required: true,
         unique: true,
-        index: true,
     },
     solBalance: {
         type: Number,
@@ -29,7 +28,5 @@ const privateBalanceSchema = new Schema<IPrivateBalance>({
 }, {
     timestamps: true,
 });
-
-privateBalanceSchema.index({ userId: 1 });
 
 export const PrivateBalance = mongoose.model<IPrivateBalance>('PrivateBalance', privateBalanceSchema);
