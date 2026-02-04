@@ -7,7 +7,7 @@ import { getSocketService } from '../socket/socketService';
 import { CacheService } from '../cache/cacheService';
 
 export interface InitiateWithdrawParams {
-    walletID: string;
+    userId: string;  // SECURITY: Use authenticated user ID directly
     recipient: string;
     amount: number;
     tokenMint?: string;
@@ -56,21 +56,16 @@ export class PrivacyWithdrawService {
 
     /**
      * Initiate and execute a private withdrawal
+     * SECURITY: Uses authenticated userId directly - no re-query by wallet
      */
     async initiateWithdraw(params: InitiateWithdrawParams): Promise<WithdrawStatus> {
-        const { walletID, recipient, amount, tokenMint } = params;
+        const { userId, recipient, amount, tokenMint } = params;
 
-        console.log('[PrivacyWithdraw] Looking for user with cash_wallet:', walletID);
-
-        const user = await User.findOne({ cash_wallet: walletID });
+        // SECURITY: Look up user by authenticated userId, not by wallet address
+        const user = await User.findById(userId);
         if (!user) {
-            console.error('[PrivacyWithdraw] User not found with cash_wallet:', walletID);
             throw new Error('User not found');
         }
-
-        console.log('[PrivacyWithdraw] User found:', user._id);
-
-        const userId = user._id.toString();
 
         if (!privacyCashService.isTokenSupported(tokenMint)) {
             throw new Error(`Token ${tokenMint} is not supported. Supported tokens: SOL, USDC`);
