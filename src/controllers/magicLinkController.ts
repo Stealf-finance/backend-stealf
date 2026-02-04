@@ -5,16 +5,28 @@ import { PreAuthService } from '../services/auth/preAuthService';
 export class MagicLinkController{
 
     /**
-     * GET /api/users/check-verification?token=preAuthToken
+     * GET /api/users/check-verification
+     * Token should be in Authorization: Bearer <preAuthToken> header
      */
     static async checkVerification(req: Request, res: Response, next: NextFunction) {
         try {
-            const { token } = req.query;
+            // SECURITY: Read token from Authorization header instead of URL query parameter
+            const authHeader = req.headers.authorization;
+            let token: string | undefined;
 
-            if (!token || typeof token !== 'string') {
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+
+            // Fallback to query param for backwards compatibility (can be removed later)
+            if (!token && req.query.token && typeof req.query.token === 'string') {
+                token = req.query.token;
+            }
+
+            if (!token) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Pre-auth token is required'
+                    error: 'Pre-auth token is required in Authorization header'
                 });
             }
 
