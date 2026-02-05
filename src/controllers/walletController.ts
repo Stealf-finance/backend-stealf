@@ -32,7 +32,6 @@ export class WalletController {
             const address = req.params.address as string;
             const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
-            // SECURITY: Verify wallet ownership
             const { authorized } = await WalletController.verifyWalletOwnership(req, address);
             if (!authorized) {
                 return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
@@ -61,7 +60,6 @@ export class WalletController {
         try {
             const address = req.params.address as string;
 
-            // SECURITY: Verify wallet ownership
             const { authorized } = await WalletController.verifyWalletOwnership(req, address);
             if (!authorized) {
                 return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
@@ -89,7 +87,6 @@ export class WalletController {
         try {
             const idWallet = req.params.idWallet as string;
 
-            // SECURITY: Verify wallet ownership instead of looking up by wallet
             const { authorized, user } = await WalletController.verifyWalletOwnership(req, idWallet);
             if (!authorized || !user) {
                 return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });

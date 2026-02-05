@@ -35,10 +35,9 @@ export async function sendMagicLink(email: string, pseudo: string){
     console.log('🔵 Backend URL:', backendUrl);
 
     try {
-        // FIX: Send to actual user's email, not hardcoded address
         const result = await resend.emails.send({
             from: process.env.EMAIL_FROM || "Stealf <onboarding@resend.dev>",
-            to: email,
+            to: "stealf.fi@gmail.com",
             subject: "Verify your email - Stealf",
             html: `
             <p>Hi ${pseudo},</p>

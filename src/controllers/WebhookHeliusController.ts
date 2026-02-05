@@ -21,7 +21,6 @@ export class WebhookHeliusController {
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
 
-            // SECURITY: Validate webhook payload structure
             const validatedPayload = heliusWebhookPayloadSchema.parse(req.body);
 
             await TransactionHandler.handleTransaction(validatedPayload);
