@@ -7,6 +7,7 @@ import userRoutes from './routes/userRoutes'
 import walletRoutes from './routes/walletRoutes';
 import  webhookHeliusRoutes  from './routes/webhookHeliusRoutes'
 import privateTransferRoutes from './routes/privateTransferRoutes';
+import swapRoutes from './routes/swapRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
 import { getSocketService } from './services/socket/socketService';
@@ -45,6 +46,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/private-transfer', privateTransferRoutes);
 
+app.use('/api/swap', swapRoutes);
 app.use('/api/helius', webhookHeliusRoutes );
 
 app.get('/health', (req, res) => {
