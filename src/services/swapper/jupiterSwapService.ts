@@ -38,14 +38,12 @@ interface ExecuteResponse {
 }
 
 export class JupiterSwapService {
-    private apiKey: string;
-
-    constructor() {
+    private getApiKey(): string {
         const key = process.env.JUPITER_API_KEY;
         if (!key) {
             throw new Error('JUPITER_API_KEY environment variable is required');
         }
-        this.apiKey = key;
+        return key;
     }
 
     async getOrder(params: OrderParams): Promise<OrderResponse> {
@@ -64,7 +62,7 @@ export class JupiterSwapService {
             `${JUPITER_ULTRA_API}/order`,
             {
                 params: queryParams,
-                headers: { 'x-api-key': this.apiKey },
+                headers: { 'x-api-key': this.getApiKey() },
             }
         );
 
@@ -81,7 +79,7 @@ export class JupiterSwapService {
             {
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': this.apiKey,
+                    'x-api-key': this.getApiKey(),
                 },
             }
         );
