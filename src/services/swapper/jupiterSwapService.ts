@@ -1,7 +1,29 @@
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 
 const JUPITER_ULTRA_API = 'https://api.jup.ag/ultra/v1';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+const isDev = process.env.NODE_ENV === 'development';
+
+function logJupiter(method: string, url: string, params?: Record<string, string>, body?: unknown) {
+    if (!isDev) return;
+    console.log(`[Jupiter] ${method} ${url}`);
+    if (params) console.log('[Jupiter] params:', params);
+    if (body) console.log('[Jupiter] body:', body);
+}
+
+function logJupiterResponse(method: string, status: number, data: unknown) {
+    if (!isDev) return;
+    console.log(`[Jupiter] ${method} response ${status}:`, JSON.stringify(data, null, 2));
+}
+
+function logJupiterError(method: string, error: unknown) {
+    if (isAxiosError(error) && error.response) {
+        console.error(`[Jupiter] ${method} error ${error.response.status}:`, error.response.data);
+    } else {
+        console.error(`[Jupiter] ${method} error:`, error);
+    }
+}
 
 interface OrderParams {
     inputMint: string;
@@ -58,33 +80,45 @@ export class JupiterSwapService {
             queryParams.receiver = params.receiver;
         }
 
-        const response = await axios.get<OrderResponse>(
-            `${JUPITER_ULTRA_API}/order`,
-            {
+        const url = `${JUPITER_ULTRA_API}/order`;
+        logJupiter('GET', url, queryParams);
+
+        try {
+            const response = await axios.get<OrderResponse>(url, {
                 params: queryParams,
                 headers: { 'x-api-key': this.getApiKey() },
-            }
-        );
+            });
 
-        return response.data;
+            logJupiterResponse('GET /order', response.status, response.data);
+            return response.data;
+        } catch (error) {
+            logJupiterError('GET /order', error);
+            throw error;
+        }
     }
 
     async executeSwap(params: ExecuteParams): Promise<ExecuteResponse> {
-        const response = await axios.post<ExecuteResponse>(
-            `${JUPITER_ULTRA_API}/execute`,
-            {
-                requestId: params.requestId,
-                signedTransaction: params.signedTransaction,
-            },
-            {
+        const url = `${JUPITER_ULTRA_API}/execute`;
+        const body = {
+            requestId: params.requestId,
+            signedTransaction: params.signedTransaction,
+        };
+        logJupiter('POST', url, undefined, body);
+
+        try {
+            const response = await axios.post<ExecuteResponse>(url, body, {
                 headers: {
                     'Content-Type': 'application/json',
                     'x-api-key': this.getApiKey(),
                 },
-            }
-        );
+            });
 
-        return response.data;
+            logJupiterResponse('POST /execute', response.status, response.data);
+            return response.data;
+        } catch (error) {
+            logJupiterError('POST /execute', error);
+            throw error;
+        }
     }
 }
 
