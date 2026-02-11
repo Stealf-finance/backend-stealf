@@ -1,7 +1,24 @@
 import { Request, Response, NextFunction } from 'express';
+import { isAxiosError } from 'axios';
 import { jupiterSwapService } from '../services/swapper/jupiterSwapService';
 import { swapOrderSchema, swapExecuteSchema } from '../utils/validations';
 import { ZodError } from 'zod';
+
+function handleSwapError(error: unknown, res: Response, next: NextFunction) {
+    if (error instanceof ZodError) {
+        return res.status(400).json({
+            error: 'Validation failed',
+            details: error.issues,
+        });
+    }
+    if (isAxiosError(error) && error.response) {
+        return res.status(error.response.status).json({
+            error: 'Jupiter API error',
+            details: error.response.data,
+        });
+    }
+    next(error);
+}
 
 export class SwapController {
     /**
@@ -19,13 +36,7 @@ export class SwapController {
                 data: orderResponse,
             });
         } catch (error) {
-            if (error instanceof ZodError) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: error.issues,
-                });
-            }
-            next(error);
+            handleSwapError(error, res, next);
         }
     }
 
@@ -44,13 +55,7 @@ export class SwapController {
                 data: executeResponse,
             });
         } catch (error) {
-            if (error instanceof ZodError) {
-                return res.status(400).json({
-                    error: 'Validation failed',
-                    details: error.issues,
-                });
-            }
-            next(error);
+            handleSwapError(error, res, next);
         }
     }
 }
