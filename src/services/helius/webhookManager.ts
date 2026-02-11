@@ -78,7 +78,7 @@ class HeliusWebhookManager {
                 return;
             }
 
-            const baseUrl = 'https://mainnet.helius-rpc.com';
+            const baseUrl = 'https://api.helius.xyz';
             const getUrl = `${baseUrl}/v0/webhooks/${config.webhookId}?api-key=${process.env.HELIUS_API_KEY}`;
 
             const getResponse = await fetch(getUrl);
