@@ -119,7 +119,7 @@ export class UserController {
             const decoded = decodeSessionJwt(sessionJWT);
             const turnkey_subOrgId = decoded.organizationId;
 
-            const user = await createUser(email, pseudo, cash_wallet, stealf_wallet, turnkey_subOrgId, coldWallet);
+            const user = await createUser(email, pseudo, cash_wallet, stealf_wallet, turnkey_subOrgId);
 
             return res.status(201).json({
                 success: true,
@@ -130,7 +130,6 @@ export class UserController {
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
                         stealf_wallet: user.stealf_wallet,
-                        coldWallet: user.coldWallet,
                         status: user.status,
                     },
                 },
@@ -179,7 +178,6 @@ export class UserController {
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
                         stealf_wallet: user.stealf_wallet,
-                        coldWallet: user.coldWallet,
                         status: user.status,
                     }
                 },

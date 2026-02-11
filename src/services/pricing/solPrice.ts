@@ -9,26 +9,40 @@ interface CoinGeckoResponse {
 
 export class SolPriceService {
 
-    private static CACHE_DURATION = 60;
+    private static CACHE_DURATION = 300; // 5 minutes
     private static CACHE_KEY = 'sol_price';
+    private static pendingFetch: Promise<number> | null = null;
+
     /**
      * retrive solana token price
      */
     static async getSolanaPrice(): Promise<number> {
+        const cachedPrice = await redisClient.get(this.CACHE_KEY);
+        if (cachedPrice) {
+            return parseFloat(cachedPrice);
+        }
+
+        if (this.pendingFetch) {
+            return this.pendingFetch;
+        }
+
+        this.pendingFetch = this.fetchAndCache();
+
         try {
-            const COINGECKO_URL = process.env.COINGECKO_URL|| '';
+            return await this.pendingFetch;
+        } finally {
+            this.pendingFetch = null;
+        }
+    }
+
+    private static async fetchAndCache(): Promise<number> {
+        try {
+            const COINGECKO_URL = process.env.COINGECKO_URL || '';
             if (!COINGECKO_URL) {
                 throw new Error('COINGECKO_URL not defined in environment variables');
             }
 
-            const cachedPrice = await redisClient.get(this.CACHE_KEY);
-
-            if (cachedPrice) {
-                return parseFloat(cachedPrice);
-            }
-
             const response = await axios.get<CoinGeckoResponse>(COINGECKO_URL);
-
             const price = response.data.solana.usd;
 
             await redisClient.set(
@@ -43,7 +57,7 @@ export class SolPriceService {
             console.error('Error fetching SOL price:', error);
 
             const fallbackPrice = await redisClient.get(this.CACHE_KEY);
-            if (fallbackPrice){
+            if (fallbackPrice) {
                 return parseFloat(fallbackPrice);
             }
 
@@ -51,8 +65,7 @@ export class SolPriceService {
         }
     }
 
-    static async clearCache() : Promise<void> {
+    static async clearCache(): Promise<void> {
         await redisClient.del(this.CACHE_KEY);
     }
 }
-

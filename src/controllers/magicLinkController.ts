@@ -10,7 +10,6 @@ export class MagicLinkController{
      */
     static async checkVerification(req: Request, res: Response, next: NextFunction) {
         try {
-            // SECURITY: Read token from Authorization header instead of URL query parameter
             const authHeader = req.headers.authorization;
             let token: string | undefined;
 
@@ -18,7 +17,6 @@ export class MagicLinkController{
                 token = authHeader.substring(7);
             }
 
-            // Fallback to query param for backwards compatibility (can be removed later)
             if (!token && req.query.token && typeof req.query.token === 'string') {
                 token = req.query.token;
             }

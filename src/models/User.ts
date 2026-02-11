@@ -6,7 +6,6 @@ export interface IUser extends Document{
     cash_wallet: string;
     stealf_wallet: string;
     turnkey_subOrgId: string;
-    coldWallet: boolean;
     status: 'pending' | 'active';
     createdAt: Date;
     updateAt: Date;
@@ -41,10 +40,6 @@ const userSchema = new Schema<IUser>({
     type: String,
     required: [true, 'Turnkey subOrgID is required'],
     unique: true,
-    },
-    coldWallet: {
-    type: Boolean,
-    required: true,
     },
     status: {
         type: String,

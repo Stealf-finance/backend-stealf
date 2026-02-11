@@ -17,7 +17,7 @@ interface PreAuthStatus {
 
 export class PreAuthService {
     private static readonly JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-    private static readonly TOKEN_EXPIRY = 10 * 60; // 10 minutes en secondes
+    private static readonly TOKEN_EXPIRY = 10 * 60; // 10 minutes in secondes
     private static readonly REDIS_KEY_PREFIX = 'preauth:';
 
     static async createPreAuthToken(email: string, pseudo: string): Promise<string> {
@@ -77,7 +77,7 @@ export class PreAuthService {
         if (status) {
             status.verified = true;
             await CacheService.set(redisKey, status, this.TOKEN_EXPIRY);
-            console.log(`✅ Pre-auth session marked as verified for ${email}`);
+            console.log(`Pre-auth session marked as verified for ${email}`);
         }
     }
 
