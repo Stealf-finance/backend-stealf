@@ -78,9 +78,9 @@ export const walletSignupSchema = z.object({
         .max(254, 'Email must be max 254 characters')
         .transform(val => val.toLowerCase().trim()),
     pseudo: z.string()
-        .min(3, 'Pseudo must be at least 3 characters')
-        .max(20, 'Pseudo must be max 20 characters')
-        .regex(/^[a-zA-Z0-9_-]+$/, 'Pseudo can only contain letters, numbers, _ and -')
+        .min(1, 'Pseudo must be at least 1 character')
+        .max(30, 'Pseudo must be max 30 characters')
+        .regex(/^[a-zA-Z0-9_.\-]+$/, 'Pseudo can only contain letters, numbers, _, - and .')
         .transform(val => val.trim()),
     publicKeyHex: z.string()
         .length(64, 'publicKeyHex must be exactly 64 hex characters')
