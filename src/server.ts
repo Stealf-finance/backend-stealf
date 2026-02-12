@@ -18,7 +18,10 @@ const app = express();
 
 const httpServer = createServer(app);
 
-// SECURITY: Limit request body size to prevent DoS
+// Helius webhooks can send large payloads (swap transactions, etc.)
+app.use('/api/helius', express.json({ limit: '5mb' }));
+
+// SECURITY: Limit request body size to prevent DoS (all other routes)
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
