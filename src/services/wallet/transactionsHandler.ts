@@ -26,6 +26,13 @@ interface Transfer {
     mint?: string;
 }
 
+// Accumulated delta per wallet per token
+interface WalletDeltas {
+    [walletAddress: string]: {
+        [tokenKey: string]: { mint: string | null; delta: number };
+    };
+}
+
 export class TransactionHandler {
     private static processedTransactions = new Set<string>();
 
@@ -63,47 +70,56 @@ export class TransactionHandler {
                 log(`--- Processing ${signature.slice(0, 12)}... ---`);
                 log(`  Native transfers: ${nativeTransfers.length} | Token transfers: ${tokenTransfers.length}`);
 
+                const deltas: WalletDeltas = {};
                 const affectedWallets = new Set<string>();
 
-                // Process native (SOL) transfers
+                // Accumulate native (SOL) deltas
                 for (const transfer of nativeTransfers) {
                     const { fromUserAccount, toUserAccount, amount } = transfer;
                     const solAmount = (amount || 0) / LAMPORTS_PER_SOL;
 
-                    log(`  SOL: ${fromUserAccount?.slice(0, 8)}... → ${toUserAccount?.slice(0, 8)}... | ${solAmount} SOL`);
+                    // Vault deposit detection
+                    if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
+                        log(`  → Vault SOL deposit detected!`);
+                        await handleVaultDeposit(transaction, transfer);
+                    }
 
-                    await this.processTransfer({
-                        from: fromUserAccount,
-                        to: toUserAccount,
-                        amount: solAmount,
-                        mint: null,
-                        vaultAddress: VAULT_ADDRESS,
-                        transaction,
-                        transfer,
-                        affectedWallets,
-                    });
+                    if (fromUserAccount) {
+                        this.addDelta(deltas, fromUserAccount, null, -solAmount);
+                        affectedWallets.add(fromUserAccount);
+                    }
+                    if (toUserAccount) {
+                        this.addDelta(deltas, toUserAccount, null, solAmount);
+                        affectedWallets.add(toUserAccount);
+                    }
                 }
 
-                // Process SPL token transfers
+                // Accumulate SPL token deltas
                 for (const transfer of tokenTransfers) {
                     const { fromUserAccount, toUserAccount, tokenAmount, mint } = transfer;
 
-                    log(`  Token: ${fromUserAccount?.slice(0, 8)}... → ${toUserAccount?.slice(0, 8)}... | ${tokenAmount} (mint: ${mint?.slice(0, 8)}...)`);
+                    // Vault deposit detection
+                    if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
+                        log(`  → Vault token deposit detected!`);
+                        await handleVaultDeposit(transaction, transfer, mint ?? undefined);
+                    }
 
-                    await this.processTransfer({
-                        from: fromUserAccount,
-                        to: toUserAccount,
-                        amount: tokenAmount || 0,
-                        mint: mint || null,
-                        vaultAddress: VAULT_ADDRESS,
-                        transaction,
-                        transfer,
-                        affectedWallets,
-                    });
+                    if (fromUserAccount) {
+                        this.addDelta(deltas, fromUserAccount, mint || null, -(tokenAmount || 0));
+                        affectedWallets.add(fromUserAccount);
+                    }
+                    if (toUserAccount) {
+                        this.addDelta(deltas, toUserAccount, mint || null, tokenAmount || 0);
+                        affectedWallets.add(toUserAccount);
+                    }
                 }
 
-                // Save to history for each affected wallet
+                // Batch: one Redis read + write + socket emit per wallet
+                const solPrice = await SolPriceService.getSolanaPrice();
+
                 for (const walletAddress of affectedWallets) {
+                    await this.applyDeltas(walletAddress, deltas[walletAddress] || {}, solPrice);
+
                     const parsedTx = parseHeliusTransaction(transaction, walletAddress);
                     await this.saveTransactionToHistory(walletAddress, parsedTx);
                 }
@@ -119,82 +135,67 @@ export class TransactionHandler {
         }
     }
 
-    private static async processTransfer(params: {
-        from?: string;
-        to?: string;
-        amount: number;
-        mint: string | null;
-        vaultAddress: string;
-        transaction: any;
-        transfer: Transfer;
-        affectedWallets: Set<string>;
-    }) {
-        const { from, to, amount, mint, vaultAddress, transaction, transfer, affectedWallets } = params;
-
-        // Detect vault deposit (privacy cash)
-        if (to === vaultAddress && from) {
-            log(`  → Vault deposit detected!`);
-            await handleVaultDeposit(transaction, transfer, mint ?? undefined);
+    private static addDelta(
+        deltas: WalletDeltas,
+        wallet: string,
+        mint: string | null,
+        amount: number
+    ) {
+        const tokenKey = mint || 'SOL';
+        if (!deltas[wallet]) deltas[wallet] = {};
+        if (!deltas[wallet][tokenKey]) {
+            deltas[wallet][tokenKey] = { mint, delta: 0 };
         }
-
-        if (from) {
-            await this.updateWalletBalance(from, -amount, mint);
-            affectedWallets.add(from);
-        }
-
-        if (to) {
-            await this.updateWalletBalance(to, amount, mint);
-            affectedWallets.add(to);
-        }
+        deltas[wallet][tokenKey].delta += amount;
     }
 
-    private static async updateWalletBalance(
+    private static async applyDeltas(
         walletAddress: string,
-        delta: number,
-        tokenMint: string | null = null
+        tokenDeltas: { [tokenKey: string]: { mint: string | null; delta: number } },
+        solPrice: number
     ) {
         try {
             const balanceKey = CacheService.balanceKey(walletAddress);
-            const solPrice = await SolPriceService.getSolanaPrice();
-
             let walletBalance = await CacheService.get<WalletBalance>(balanceKey);
 
             if (!walletBalance) {
                 walletBalance = { tokens: [], totalUSD: 0 };
             }
 
-            // Find or create token entry
-            let token = walletBalance.tokens.find(t => t.tokenMint === tokenMint);
-            if (!token) {
-                const symbol = tokenMint === null ? 'SOL'
-                    : tokenMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC'
-                    : tokenMint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' ? 'USDT'
-                    : 'UNKNOWN';
-                const decimals = tokenMint === null ? 9 : 6;
-                token = { tokenMint, tokenSymbol: symbol, tokenDecimals: decimals, balance: 0, balanceUSD: 0 };
-                walletBalance.tokens.push(token);
-            }
+            for (const [, { mint, delta }] of Object.entries(tokenDeltas)) {
+                if (delta === 0) continue;
 
-            token.balance += delta;
-            if (token.balance < 0) token.balance = 0;
+                let token = walletBalance.tokens.find(t => t.tokenMint === mint);
+                if (!token) {
+                    const symbol = mint === null ? 'SOL'
+                        : mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC'
+                        : mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' ? 'USDT'
+                        : 'UNKNOWN';
+                    const decimals = mint === null ? 9 : 6;
+                    token = { tokenMint: mint, tokenSymbol: symbol, tokenDecimals: decimals, balance: 0, balanceUSD: 0 };
+                    walletBalance.tokens.push(token);
+                }
 
-            if (token.tokenSymbol === 'SOL') {
-                token.balanceUSD = token.balance * solPrice;
-            } else if (token.tokenSymbol === 'USDC' || token.tokenSymbol === 'USDT') {
-                token.balanceUSD = token.balance;
-            } else {
-                token.balanceUSD = 0;
+                token.balance += delta;
+                if (token.balance < 0) token.balance = 0;
+
+                if (token.tokenSymbol === 'SOL') {
+                    token.balanceUSD = token.balance * solPrice;
+                } else if (token.tokenSymbol === 'USDC' || token.tokenSymbol === 'USDT') {
+                    token.balanceUSD = token.balance;
+                } else {
+                    token.balanceUSD = 0;
+                }
+
+                log(`  Balance: ${walletAddress.slice(0, 8)}... | ${token.tokenSymbol} ${delta > 0 ? '+' : ''}${delta} → ${token.balance}`);
             }
 
             walletBalance.totalUSD = walletBalance.tokens.reduce((sum, t) => sum + t.balanceUSD, 0);
 
             await CacheService.set(balanceKey, walletBalance, 0);
-
             getSocketService().emitBalanceUpdate(walletAddress, walletBalance);
-
-            log(`  Balance updated: ${walletAddress.slice(0, 8)}... | ${token.tokenSymbol} ${delta > 0 ? '+' : ''}${delta} → ${token.balance}`);
         } catch (error) {
-            logError(`Failed to update balance for ${walletAddress}:`, error);
+            logError(`Failed to apply deltas for ${walletAddress}:`, error);
             throw error;
         }
     }
