@@ -7,106 +7,147 @@ import { SolPriceService } from '../pricing/solPrice';
 import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
 import { WalletBalance } from '../helius/walletInit';
 
+const isDev = process.env.NODE_ENV === 'development';
+const TAG = '[TransactionHandler]';
+
+function log(...args: unknown[]) {
+    if (isDev) console.log(TAG, ...args);
+}
+
+function logError(...args: unknown[]) {
+    console.error(TAG, ...args);
+}
+
+interface Transfer {
+    fromUserAccount?: string;
+    toUserAccount?: string;
+    amount?: number;
+    tokenAmount?: number;
+    mint?: string;
+}
+
 export class TransactionHandler {
     private static processedTransactions = new Set<string>();
 
     private static getVaultAddress(): string {
         const address = process.env.VAULT_PUBLIC_KEY;
         if (!address) {
-            console.error('[TransactionHandler] VAULT_PUBLIC_KEY not configured in environment');
+            logError('VAULT_PUBLIC_KEY not configured');
         }
         return address || '';
     }
 
     static async handleTransaction(payload: any) {
-
         try {
             const transactions = Array.isArray(payload) ? payload : [payload];
-            console.log(`[TransactionHandler] Processing ${transactions.length} transaction(s)`);
+            log(`Received ${transactions.length} transaction(s)`);
 
             const VAULT_ADDRESS = this.getVaultAddress();
 
             for (const transaction of transactions) {
-                if (!transaction || (!transaction.nativeTransfers && !transaction.tokenTransfers)) {
-                    console.log('[TransactionHandler] No transfers found in transaction');
+                const signature = transaction?.signature;
+                const nativeTransfers: Transfer[] = transaction?.nativeTransfers || [];
+                const tokenTransfers: Transfer[] = transaction?.tokenTransfers || [];
+
+                if (!signature || (nativeTransfers.length === 0 && tokenTransfers.length === 0)) {
+                    log('Skipping — no signature or no transfers');
                     continue;
                 }
 
-                const signature = transaction.signature;
                 if (this.processedTransactions.has(signature)) {
-                    console.log(`[TransactionHandler] Transaction ${signature} already processed, skipping`);
+                    log(`Skipping — already processed: ${signature.slice(0, 12)}...`);
                     continue;
                 }
                 this.processedTransactions.add(signature);
 
+                log(`--- Processing ${signature.slice(0, 12)}... ---`);
+                log(`  Native transfers: ${nativeTransfers.length} | Token transfers: ${tokenTransfers.length}`);
+
                 const affectedWallets = new Set<string>();
 
-                if (transaction.nativeTransfers && transaction.nativeTransfers.length > 0){
-                    console.log(`[TransactionHandler] Found ${transaction.nativeTransfers.length} native transfer(s)`);
-                    for (const transfer of transaction.nativeTransfers){
-                        const { fromUserAccount, toUserAccount, amount } = transfer;
-                        console.log(`[TransactionHandler] Native transfer: ${fromUserAccount} -> ${toUserAccount}, amount: ${amount}`);
-                        console.log(`[TransactionHandler] Vault address: ${VAULT_ADDRESS}`);
-                        console.log(`[TransactionHandler] Is vault deposit? ${toUserAccount === VAULT_ADDRESS}`);
+                // Process native (SOL) transfers
+                for (const transfer of nativeTransfers) {
+                    const { fromUserAccount, toUserAccount, amount } = transfer;
+                    const solAmount = (amount || 0) / LAMPORTS_PER_SOL;
 
-                        if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                            console.log('[TransactionHandler] 🎯 Vault deposit detected! Calling handleVaultDeposit...');
-                            await handleVaultDeposit(transaction, transfer);
-                        }
+                    log(`  SOL: ${fromUserAccount?.slice(0, 8)}... → ${toUserAccount?.slice(0, 8)}... | ${solAmount} SOL`);
 
-                        if (fromUserAccount){
-                            await this.updateWalletBalance(fromUserAccount, -amount / LAMPORTS_PER_SOL);
-                            affectedWallets.add(fromUserAccount);
-                        }
-
-                        if (toUserAccount){
-                            await this.updateWalletBalance(toUserAccount, amount / LAMPORTS_PER_SOL);
-                            affectedWallets.add(toUserAccount);
-                        }
-                    }
+                    await this.processTransfer({
+                        from: fromUserAccount,
+                        to: toUserAccount,
+                        amount: solAmount,
+                        mint: null,
+                        vaultAddress: VAULT_ADDRESS,
+                        transaction,
+                        transfer,
+                        affectedWallets,
+                    });
                 }
 
-                // Check for privacy cash vault deposits (Token transfers)
-                if (transaction.tokenTransfers && transaction.tokenTransfers.length > 0) {
-                    console.log(`[TransactionHandler] Found ${transaction.tokenTransfers.length} token transfer(s)`);
-                    for (const transfer of transaction.tokenTransfers) {
-                        const { fromUserAccount, toUserAccount, tokenAmount, mint } = transfer;
-                        console.log(`[TransactionHandler] Token transfer: ${fromUserAccount} -> ${toUserAccount}, amount: ${tokenAmount}, mint: ${mint}`);
-                        console.log(`[TransactionHandler] Vault address: ${VAULT_ADDRESS}`);
-                        console.log(`[TransactionHandler] Is vault deposit? ${toUserAccount === VAULT_ADDRESS}`);
+                // Process SPL token transfers
+                for (const transfer of tokenTransfers) {
+                    const { fromUserAccount, toUserAccount, tokenAmount, mint } = transfer;
 
-                        // Detect vault deposit for privacy cash (tokens)
-                        if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                            console.log('[TransactionHandler] 🎯 Vault token deposit detected! Calling handleVaultDeposit...');
-                            await handleVaultDeposit(transaction, transfer, mint);
-                        }
+                    log(`  Token: ${fromUserAccount?.slice(0, 8)}... → ${toUserAccount?.slice(0, 8)}... | ${tokenAmount} (mint: ${mint?.slice(0, 8)}...)`);
 
-                        if (fromUserAccount){
-                            await this.updateWalletBalance(fromUserAccount, -tokenAmount, mint);
-                            affectedWallets.add(fromUserAccount);
-                        }
-
-                        if (toUserAccount){
-                            await this.updateWalletBalance(toUserAccount, tokenAmount, mint);
-                            affectedWallets.add(toUserAccount);
-                        }
-                    }
+                    await this.processTransfer({
+                        from: fromUserAccount,
+                        to: toUserAccount,
+                        amount: tokenAmount || 0,
+                        mint: mint || null,
+                        vaultAddress: VAULT_ADDRESS,
+                        transaction,
+                        transfer,
+                        affectedWallets,
+                    });
                 }
 
+                // Save to history for each affected wallet
                 for (const walletAddress of affectedWallets) {
                     const parsedTx = parseHeliusTransaction(transaction, walletAddress);
                     await this.saveTransactionToHistory(walletAddress, parsedTx);
                 }
+
+                log(`  Affected wallets: ${[...affectedWallets].map(w => w.slice(0, 8) + '...').join(', ')}`);
             }
 
-            console.log('Transaction(s) processed successfully');
+            log('All transactions processed');
 
-        } catch(error) {
-            console.error('Error handling transactions:', error);
+        } catch (error) {
+            logError('Failed to handle transactions:', error);
             throw error;
         }
     }
-    
+
+    private static async processTransfer(params: {
+        from?: string;
+        to?: string;
+        amount: number;
+        mint: string | null;
+        vaultAddress: string;
+        transaction: any;
+        transfer: Transfer;
+        affectedWallets: Set<string>;
+    }) {
+        const { from, to, amount, mint, vaultAddress, transaction, transfer, affectedWallets } = params;
+
+        // Detect vault deposit (privacy cash)
+        if (to === vaultAddress && from) {
+            log(`  → Vault deposit detected!`);
+            await handleVaultDeposit(transaction, transfer, mint ?? undefined);
+        }
+
+        if (from) {
+            await this.updateWalletBalance(from, -amount, mint);
+            affectedWallets.add(from);
+        }
+
+        if (to) {
+            await this.updateWalletBalance(to, amount, mint);
+            affectedWallets.add(to);
+        }
+    }
+
     private static async updateWalletBalance(
         walletAddress: string,
         delta: number,
@@ -137,7 +178,6 @@ export class TransactionHandler {
             token.balance += delta;
             if (token.balance < 0) token.balance = 0;
 
-            // Recalculate USD
             if (token.tokenSymbol === 'SOL') {
                 token.balanceUSD = token.balance * solPrice;
             } else if (token.tokenSymbol === 'USDC' || token.tokenSymbol === 'USDT') {
@@ -151,8 +191,10 @@ export class TransactionHandler {
             await CacheService.set(balanceKey, walletBalance, 0);
 
             getSocketService().emitBalanceUpdate(walletAddress, walletBalance);
+
+            log(`  Balance updated: ${walletAddress.slice(0, 8)}... | ${token.tokenSymbol} ${delta > 0 ? '+' : ''}${delta} → ${token.balance}`);
         } catch (error) {
-            console.error(`Error updating balance for ${walletAddress}`, error);
+            logError(`Failed to update balance for ${walletAddress}:`, error);
             throw error;
         }
     }
@@ -171,6 +213,7 @@ export class TransactionHandler {
             );
 
             if (isDuplicate) {
+                log(`  History: duplicate skipped for ${walletAddress.slice(0, 8)}...`);
                 return;
             }
 
@@ -179,8 +222,10 @@ export class TransactionHandler {
             await CacheService.set(historyKey, newHistory, 0);
 
             getSocketService().emitNewTransaction(walletAddress, transaction);
+
+            log(`  History updated: ${walletAddress.slice(0, 8)}... (${newHistory.length} entries)`);
         } catch (error) {
-            console.error(`Error saving transaction to history for ${walletAddress}:`, error);
+            logError(`Failed to save history for ${walletAddress}:`, error);
             throw error;
         }
     }
