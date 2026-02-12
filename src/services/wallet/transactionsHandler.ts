@@ -3,6 +3,7 @@ import { parseHeliusTransaction } from './transactionParser';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getSocketService } from '../socket/socketService';
 import { SolPriceService } from '../pricing/solPrice';
+import { TokenMetadataService } from '../token/TokenMetadataService';
 
 import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
 import { WalletBalance } from '../helius/walletInit';
@@ -120,7 +121,7 @@ export class TransactionHandler {
                 for (const walletAddress of affectedWallets) {
                     await this.applyDeltas(walletAddress, deltas[walletAddress] || {}, solPrice);
 
-                    const parsedTx = parseHeliusTransaction(transaction, walletAddress);
+                    const parsedTx = await parseHeliusTransaction(transaction, walletAddress);
                     await this.saveTransactionToHistory(walletAddress, parsedTx);
                 }
 
@@ -162,16 +163,26 @@ export class TransactionHandler {
                 walletBalance = { tokens: [], totalUSD: 0 };
             }
 
+            // Pre-resolve metadata for all unknown mints in this batch
+            const unknownMints = Object.values(tokenDeltas)
+                .filter(({ mint }) => mint !== null && !walletBalance!.tokens.some(t => t.tokenMint === mint))
+                .map(({ mint }) => mint as string);
+            const metadataMap = unknownMints.length > 0
+                ? await TokenMetadataService.getMetadataBatch(unknownMints)
+                : new Map();
+
             for (const [, { mint, delta }] of Object.entries(tokenDeltas)) {
                 if (delta === 0) continue;
 
                 let token = walletBalance.tokens.find(t => t.tokenMint === mint);
                 if (!token) {
-                    const symbol = mint === null ? 'SOL'
-                        : mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ? 'USDC'
-                        : mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' ? 'USDT'
-                        : 'UNKNOWN';
-                    const decimals = mint === null ? 9 : 6;
+                    let symbol = 'SOL';
+                    let decimals = 9;
+                    if (mint !== null) {
+                        const meta = metadataMap.get(mint);
+                        symbol = meta?.symbol || 'UNKNOWN';
+                        decimals = meta?.decimals ?? 9;
+                    }
                     token = { tokenMint: mint, tokenSymbol: symbol, tokenDecimals: decimals, balance: 0, balanceUSD: 0 };
                     walletBalance.tokens.push(token);
                 }

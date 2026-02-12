@@ -1,5 +1,6 @@
 import { SolPriceService } from '../pricing/solPrice';
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { TokenMetadataService } from '../token/TokenMetadataService';
 
 export interface Transaction {
     signature: string;
@@ -81,7 +82,7 @@ export const getExplorerUrl = (signature: string, cluster: 'devnet' | 'mainnet-b
  * @param walletAddress - The wallet address we're viewing the transaction from
  * @returns RawTransaction object
  */
-export function parseHeliusTransaction(tx: any, walletAddress: string): RawTransaction {
+export async function parseHeliusTransaction(tx: any, walletAddress: string): Promise<RawTransaction> {
     let amount = 0;
     let type: 'sent' | 'received' | 'unknown' = 'unknown';
     let sender = tx.feePayer || '';
@@ -100,7 +101,7 @@ export function parseHeliusTransaction(tx: any, walletAddress: string): RawTrans
         type = transfer.fromUserAccount === walletAddress ? 'sent' : 'received';
         sender = transfer.fromUserAccount;
         recipient = transfer.toUserAccount;
-        tokenMint = null; // SOL natif
+        tokenMint = null;
         tokenSymbol = 'SOL';
         tokenDecimals = 9;
 
@@ -116,16 +117,16 @@ export function parseHeliusTransaction(tx: any, walletAddress: string): RawTrans
         recipient = transfer.toUserAccount;
         tokenMint = transfer.mint || null;
 
-        // Map common token mints to symbols
-        if (tokenMint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') {
-            tokenSymbol = 'USDC';
-            tokenDecimals = 6;
-        } else if (tokenMint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') {
-            tokenSymbol = 'USDT';
-            tokenDecimals = 6;
-        } else {
-            tokenSymbol = transfer.symbol || 'UNKNOWN';
-            tokenDecimals = transfer.decimals || 9;
+        if (tokenMint) {
+            // Use Helius-provided symbol if available, otherwise resolve via metadata service
+            if (transfer.symbol && transfer.symbol !== 'UNKNOWN') {
+                tokenSymbol = transfer.symbol;
+                tokenDecimals = transfer.decimals || 9;
+            } else {
+                const meta = await TokenMetadataService.getMetadata(tokenMint);
+                tokenSymbol = meta.symbol;
+                tokenDecimals = meta.decimals;
+            }
         }
     }
 
