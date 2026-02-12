@@ -1,6 +1,10 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { CacheService } from "../cache/cacheService";
 import { parseHeliusTransaction } from "../wallet/transactionParser";
+import { TokenMetadataService } from "../token/TokenMetadataService";
+
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 
 let _connection: Connection | null = null;
 function getConnection(): Connection {
@@ -25,11 +29,6 @@ export interface WalletBalance {
     tokens: TokenBalance[];
     totalUSD: number;
 }
-
-const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
-    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': { symbol: 'USDC', decimals: 6 },
-    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': { symbol: 'USDT', decimals: 6 },
-};
 
 export const solanaService = {
 
@@ -59,21 +58,33 @@ export const solanaService = {
                 balanceUSD: balanceInSOL * solPrice,
             }];
 
-            // SPL token balances
-            const tokenAccounts = await getConnection().getParsedTokenAccountsByOwner(publicKey, {
-                programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-            });
+            // SPL token balances (Token Program + Token-2022)
+            const [tokenAccounts, token2022Accounts] = await Promise.all([
+                getConnection().getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
+                getConnection().getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID }),
+            ]);
 
-            for (const account of tokenAccounts.value) {
+            const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
+
+            // Collect non-zero mints for batch metadata resolution
+            const nonZeroAccounts: { mint: string; amount: number; decimals: number }[] = [];
+            for (const account of allAccounts) {
                 const info = account.account.data.parsed.info;
                 const mint: string = info.mint;
                 const amount: number = info.tokenAmount.uiAmount || 0;
-
                 if (amount === 0) continue;
+                nonZeroAccounts.push({ mint, amount, decimals: info.tokenAmount.decimals });
+            }
 
-                const known = KNOWN_TOKENS[mint];
-                const symbol = known?.symbol || 'UNKNOWN';
-                const decimals = known?.decimals || info.tokenAmount.decimals;
+            // Batch resolve all token metadata in one call
+            const mints = nonZeroAccounts.map(a => a.mint);
+            const metadataMap = mints.length > 0
+                ? await TokenMetadataService.getMetadataBatch(mints)
+                : new Map();
+
+            for (const { mint, amount, decimals } of nonZeroAccounts) {
+                const meta = metadataMap.get(mint);
+                const symbol = meta?.symbol || 'UNKNOWN';
 
                 let balanceUSD = 0;
                 if (symbol === 'USDC' || symbol === 'USDT') {
@@ -83,7 +94,7 @@ export const solanaService = {
                 tokens.push({
                     tokenMint: mint,
                     tokenSymbol: symbol,
-                    tokenDecimals: decimals,
+                    tokenDecimals: meta?.decimals ?? decimals,
                     balance: amount,
                     balanceUSD,
                 });
@@ -155,7 +166,9 @@ export const solanaService = {
             }
 
             // Transform Helius transactions to RawTransaction format
-            const rawTransactions = allTransactions.map((tx) => parseHeliusTransaction(tx, address));
+            const rawTransactions = await Promise.all(
+                allTransactions.map((tx) => parseHeliusTransaction(tx, address))
+            );
 
             await CacheService.set(cacheKey, rawTransactions, 0);
             return rawTransactions.slice(0, limit);
