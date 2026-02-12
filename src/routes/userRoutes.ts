@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/authController';
+import { WalletAuthController } from '../controllers/walletAuthController';
 import { MagicLinkController } from '../controllers/magicLinkController';
 import { SolPriceController } from '../controllers/solPriceController';
 import { availabilityCheckLimiter } from '../middleware/rateLimiter';
@@ -9,6 +10,8 @@ const router = Router();
 
 
 router.post('/auth', UserController.authUser);
+router.post('/wallet-signup', availabilityCheckLimiter, WalletAuthController.walletSignup);
+router.post('/wallet-login', availabilityCheckLimiter, WalletAuthController.walletLogin);
 router.post('/check-availability', availabilityCheckLimiter, UserController.checkAvailability);
 router.get('/check-verification', MagicLinkController.checkVerification);
 router.get('/verify-magic-link', MagicLinkController.verifyMagicLink);

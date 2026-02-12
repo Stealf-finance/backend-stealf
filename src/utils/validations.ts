@@ -70,6 +70,33 @@ export const authUserSchema = z.object({
 });
 
 /**
+ * Schema for wallet-based signup (POST /api/users/wallet-signup)
+ */
+export const walletSignupSchema = z.object({
+    email: z.string()
+        .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email format')
+        .max(254, 'Email must be max 254 characters')
+        .transform(val => val.toLowerCase().trim()),
+    pseudo: z.string()
+        .min(3, 'Pseudo must be at least 3 characters')
+        .max(20, 'Pseudo must be max 20 characters')
+        .regex(/^[a-zA-Z0-9_-]+$/, 'Pseudo can only contain letters, numbers, _ and -')
+        .transform(val => val.trim()),
+    publicKeyHex: z.string()
+        .length(64, 'publicKeyHex must be exactly 64 hex characters')
+        .regex(/^[0-9a-fA-F]+$/, 'publicKeyHex must be a valid hex string'),
+});
+
+/**
+ * Schema for wallet-based login (POST /api/users/wallet-login)
+ */
+export const walletLoginSchema = z.object({
+    publicKeyHex: z.string()
+        .length(64, 'publicKeyHex must be exactly 64 hex characters')
+        .regex(/^[0-9a-fA-F]+$/, 'publicKeyHex must be a valid hex string'),
+});
+
+/**
  * Schema for Helius webhook payload validation
  */
 const heliusTransferSchema = z.object({

@@ -6,6 +6,7 @@ export interface IUser extends Document{
     cash_wallet: string;
     stealf_wallet: string;
     turnkey_subOrgId: string;
+    authMethod: 'passkey' | 'wallet';
     status: 'pending' | 'active';
     createdAt: Date;
     updateAt: Date;
@@ -34,7 +35,13 @@ const userSchema = new Schema<IUser>({
     },
     stealf_wallet:{
         type: String,
-        required: [true, 'Cash wallet is required'],
+        required: [true, 'Stealf wallet is required'],
+        index: true,
+    },
+    authMethod: {
+        type: String,
+        enum: ['passkey', 'wallet'],
+        default: 'passkey',
     },
     turnkey_subOrgId: {
     type: String,
