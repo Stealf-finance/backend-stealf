@@ -8,8 +8,7 @@ export interface TokenMetadata {
 
 const CACHE_TTL = 86400; // 24h
 const CACHE_PREFIX = 'token:meta:';
-const JUPITER_TOKEN_API = 'https://tokens.jup.ag/token';
-const JUPITER_TOKENS_API = 'https://tokens.jup.ag/tokens';
+const JUPITER_TOKEN_API = 'https://api.jup.ag/tokens/v2/search';  // ?query={mint}
 
 // Well-known tokens that never change — avoids unnecessary API calls
 const WELL_KNOWN: Record<string, TokenMetadata> = {
@@ -89,21 +88,36 @@ export class TokenMetadataService {
     private static async fetchSingle(mint: string): Promise<TokenMetadata> {
         try {
             const apiKey = process.env.JUPITER_API_KEY;
-            const headers: Record<string, string> = { 'Accept': 'application/json' };
-            if (apiKey) headers['x-api-key'] = apiKey;
+            if (!apiKey) {
+                await CacheService.set(`${CACHE_PREFIX}${mint}`, UNKNOWN_TOKEN, CACHE_TTL);
+                return UNKNOWN_TOKEN;
+            }
 
-            const response = await fetch(`${JUPITER_TOKEN_API}/${mint}`, { headers });
+            const response = await fetch(`${JUPITER_TOKEN_API}?query=${mint}`, {
+                headers: { 'x-api-key': apiKey },
+            });
 
             if (!response.ok) {
                 await CacheService.set(`${CACHE_PREFIX}${mint}`, UNKNOWN_TOKEN, CACHE_TTL);
                 return UNKNOWN_TOKEN;
             }
 
-            const data = await response.json() as any;
+            const data = await response.json() as any[];
+
+            // Search returns an array — find exact mint match
+            const token = Array.isArray(data)
+                ? data.find((t: any) => t.address === mint)
+                : null;
+
+            if (!token) {
+                await CacheService.set(`${CACHE_PREFIX}${mint}`, UNKNOWN_TOKEN, CACHE_TTL);
+                return UNKNOWN_TOKEN;
+            }
+
             const meta: TokenMetadata = {
-                symbol: data.symbol || 'UNKNOWN',
-                decimals: data.decimals ?? 9,
-                name: data.name || 'Unknown Token',
+                symbol: token.symbol || 'UNKNOWN',
+                decimals: token.decimals ?? 9,
+                name: token.name || 'Unknown Token',
             };
 
             await CacheService.set(`${CACHE_PREFIX}${mint}`, meta, CACHE_TTL);
@@ -118,15 +132,18 @@ export class TokenMetadataService {
         const result = new Map<string, TokenMetadata>();
         try {
             const apiKey = process.env.JUPITER_API_KEY;
-            const headers: Record<string, string> = { 'Accept': 'application/json' };
-            if (apiKey) headers['x-api-key'] = apiKey;
+            if (!apiKey) return result;
 
+            // V2 search endpoint accepts comma-separated mint addresses (max 100)
             const query = mints.join(',');
-            const response = await fetch(`${JUPITER_TOKENS_API}?tokens=${query}`, { headers });
+            const response = await fetch(`${JUPITER_TOKEN_API}?query=${query}`, {
+                headers: { 'x-api-key': apiKey },
+            });
 
             if (!response.ok) return result;
 
             const data = await response.json() as any[];
+            if (!Array.isArray(data)) return result;
 
             for (const token of data) {
                 if (!token.address) continue;
