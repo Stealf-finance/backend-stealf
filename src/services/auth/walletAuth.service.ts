@@ -4,12 +4,19 @@ import { getHeliusWebhookManager } from "../helius/webhookManager";
 import { privacyBalanceService } from "../privacycash/PrivacyBalanceService";
 import bs58 from "bs58";
 
-const turnkeyClient = new Turnkey({
-  apiBaseUrl: "https://api.turnkey.com",
-  apiPrivateKey: process.env.TURNKEY_API_PRIVATE_KEY!,
-  apiPublicKey: process.env.TURNKEY_API_PUBLIC_KEY!,
-  defaultOrganizationId: process.env.TURNKEY_ORGANIZATION_ID!,
-});
+let _turnkeyClient: Turnkey | null = null;
+
+function getTurnkeyClient(): Turnkey {
+  if (!_turnkeyClient) {
+    _turnkeyClient = new Turnkey({
+      apiBaseUrl: "https://api.turnkey.com",
+      apiPrivateKey: process.env.TURNKEY_API_PRIVATE_KEY!,
+      apiPublicKey: process.env.TURNKEY_API_PUBLIC_KEY!,
+      defaultOrganizationId: process.env.TURNKEY_ORGANIZATION_ID!,
+    });
+  }
+  return _turnkeyClient;
+}
 
 /**
  * Convert a hex-encoded ed25519 public key to a Solana base58 address.
@@ -57,7 +64,7 @@ export async function createWalletUser(
   }
 
   // Create sub-organization with wallet public key as API key authenticator
-  const subOrgResponse = await turnkeyClient.apiClient().createSubOrganization({
+  const subOrgResponse = await getTurnkeyClient().apiClient().createSubOrganization({
     organizationId: process.env.TURNKEY_ORGANIZATION_ID!,
     subOrganizationName: `Stealf User - ${email}`,
     rootUsers: [
@@ -69,6 +76,11 @@ export async function createWalletUser(
             apiKeyName: `Wallet Auth - ${publicKeyHex.substring(0, 16)}`,
             publicKey: publicKeyHex,
             curveType: "API_KEY_CURVE_ED25519",
+          },
+          {
+            apiKeyName: "Backend Server Key",
+            publicKey: process.env.TURNKEY_API_PUBLIC_KEY!,
+            curveType: "API_KEY_CURVE_P256",
           },
         ],
         authenticators: [],
@@ -97,7 +109,7 @@ export async function createWalletUser(
     throw new Error("Failed to create Cash Wallet in sub-organization");
   }
 
-  // Convert publicKeyHex to base58 for stealf_wallet address
+  // Convert publicKeyHex (Seeker wallet) to base58 for stealf_wallet
   const stealfWalletAddress = hexToBase58(publicKeyHex);
 
   // Create user in database

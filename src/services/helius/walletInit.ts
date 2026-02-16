@@ -92,7 +92,7 @@ export const solanaService = {
             const totalUSD = tokens.reduce((sum, t) => sum + t.balanceUSD, 0);
             const result: WalletBalance = { tokens, totalUSD };
 
-            await CacheService.set(cacheKey, result, 0);
+            await CacheService.set(cacheKey, result, 5);
 
             return result;
         } catch (error) {
@@ -157,7 +157,7 @@ export const solanaService = {
             // Transform Helius transactions to RawTransaction format
             const rawTransactions = allTransactions.map((tx) => parseHeliusTransaction(tx, address));
 
-            await CacheService.set(cacheKey, rawTransactions, 0);
+            await CacheService.set(cacheKey, rawTransactions, 5);
             return rawTransactions.slice(0, limit);
 
         } catch (error) {

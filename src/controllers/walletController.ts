@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import { solanaService } from '../services/helius/walletInit';
 import { parseTransactions } from '../services/wallet/transactionParser';
-
 import { privacyBalanceService } from '../services/privacycash/PrivacyBalanceService';
+import { signAndSendCashWalletTransaction } from '../services/auth/turnkeySign.service';
 
 export class WalletController {
     /**
@@ -104,6 +104,46 @@ export class WalletController {
                 },
             });
         } catch (error){
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/wallet/sign-and-send
+     * Signs and sends a transaction from the user's Cash wallet via Turnkey.
+     * Body: { unsignedTransaction: string (hex-encoded) }
+     */
+    static async signAndSendFromCashWallet(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { unsignedTransaction } = req.body;
+            if (!unsignedTransaction) {
+                return res.status(400).json({ error: 'unsignedTransaction is required' });
+            }
+
+            const mongoUserId = (req as any).user?.mongoUserId;
+            if (!mongoUserId) {
+                return res.status(401).json({ error: 'Not authenticated' });
+            }
+
+            const user = await User.findById(mongoUserId);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            if (!user.turnkey_subOrgId) {
+                return res.status(400).json({ error: 'No Turnkey sub-organization found' });
+            }
+
+            const txSignature = await signAndSendCashWalletTransaction(
+                user.turnkey_subOrgId,
+                unsignedTransaction
+            );
+
+            return res.status(200).json({
+                success: true,
+                data: { txSignature },
+            });
+        } catch (error) {
             next(error);
         }
     }

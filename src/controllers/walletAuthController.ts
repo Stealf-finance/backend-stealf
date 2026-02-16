@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import jwt from "jsonwebtoken";
 import { walletSignupSchema, walletLoginSchema } from "../utils/validations";
 import {
   createWalletUser,
   findUserByWallet,
 } from "../services/auth/walletAuth.service";
+
+const JWT_SECRET = process.env.WALLET_JWT_SECRET || "stealf-wallet-auth-secret-change-in-production";
 
 export class WalletAuthController {
   /**
@@ -18,6 +21,16 @@ export class WalletAuthController {
       );
 
       const result = await createWalletUser({ email, pseudo, publicKeyHex });
+
+      const token = jwt.sign(
+        {
+          mongoUserId: result.user._id.toString(),
+          organizationId: result.subOrgId,
+          authMethod: "wallet",
+        },
+        JWT_SECRET,
+        { expiresIn: "30d" }
+      );
 
       return res.status(201).json({
         success: true,
@@ -33,6 +46,7 @@ export class WalletAuthController {
           },
           subOrgId: result.subOrgId,
           cashWallet: result.cashWalletAddress,
+          token,
         },
       });
     } catch (error: any) {
@@ -55,7 +69,11 @@ export class WalletAuthController {
         });
       }
 
-      next(error);
+      console.error("[walletSignup] Unhandled error:", error);
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Internal server error",
+      });
     }
   }
 
@@ -76,6 +94,16 @@ export class WalletAuthController {
         });
       }
 
+      const token = jwt.sign(
+        {
+          mongoUserId: user._id.toString(),
+          organizationId: user.turnkey_subOrgId,
+          authMethod: "wallet",
+        },
+        JWT_SECRET,
+        { expiresIn: "30d" }
+      );
+
       return res.json({
         success: true,
         data: {
@@ -89,6 +117,7 @@ export class WalletAuthController {
             status: user.status,
             turnkey_subOrgId: user.turnkey_subOrgId,
           },
+          token,
         },
       });
     } catch (error: any) {
