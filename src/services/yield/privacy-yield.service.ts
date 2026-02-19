@@ -3,10 +3,12 @@ import { privacyCashService } from "../privacycash/PrivacyCashService";
 import { getYieldService } from "./yield.service";
 import { getUsdcYieldService } from "./usdc-yield.service";
 import { getArciumVaultService } from "./arcium-vault.service";
+import { getYieldMpcEnhancementsService } from "./yield-mpc-enhancements.service";
 import { getBatchStakingService } from "./batch-staking.service";
 import { decomposeToDenominations, solToLamports, getRandomSurplusDelay } from "./denomination.service";
-import { VaultType } from "../../models/VaultShare";
+import { VaultType, VaultShare } from "../../models/VaultShare";
 import { SUPPORTED_TOKENS, calculateWithdrawalFee } from "../../config/privacyCash";
+import { getExchangeRate } from "./yield-rates.service";
 
 /**
  * Privacy-wrapped yield operations.
@@ -99,6 +101,36 @@ class PrivacyYieldService {
       userId,
       vaultType
     );
+
+    // Non-blocking: trigger yield distribution + snapshot after confirmed deposit
+    if (confirmResult.success && process.env.ARCIUM_ENABLED === "true") {
+      (async () => {
+        try {
+          const exchangeRate = await getExchangeRate(vaultType);
+          // Convert exchange rate to integer ratio: rate_num/1_000_000
+          // e.g. rate=1.0224 → rateNum=1_022_400
+          const rateNum = BigInt(Math.min(Math.round(exchangeRate * 1_000_000), 1_100_000));
+          const rateDenom = 1_000_000n;
+
+          const enhancementsService = getYieldMpcEnhancementsService();
+          await enhancementsService.computeYieldDistribution(userId, 0, rateNum, rateDenom);
+        } catch (err: any) {
+          console.error("[YieldMpcEnhancements] computeYieldDistribution (deposit) failed:", err.message);
+        }
+
+        try {
+          const share = await VaultShare.findOne({ userId, vaultType, status: "active" }).sort({ createdAt: -1 });
+          if (share) {
+            const nextIndex = BigInt((share.snapshotIndex ?? 0) + 1);
+            const enhancementsService = getYieldMpcEnhancementsService();
+            await enhancementsService.takeBalanceSnapshot(userId, 0, nextIndex);
+            await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: Number(nextIndex) });
+          }
+        } catch (err: any) {
+          console.error("[YieldMpcEnhancements] takeBalanceSnapshot (deposit) failed:", err.message);
+        }
+      })();
+    }
 
     return {
       success: confirmResult.success,

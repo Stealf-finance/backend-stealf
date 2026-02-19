@@ -5,6 +5,7 @@ import { getUsdcYieldService } from "../services/yield/usdc-yield.service";
 import { getPrivacyYieldService } from "../services/yield/privacy-yield.service";
 import { getAutoSweepService } from "../services/yield/auto-sweep.service";
 import { getArciumVaultService, isArciumEnabled } from "../services/yield/arcium-vault.service";
+import { getYieldMpcEnhancementsService } from "../services/yield/yield-mpc-enhancements.service";
 import { confirmPrivateDepositArcium } from "../services/yield/private-sol.service";
 import { getBatchStakingService } from "../services/yield/batch-staking.service";
 
@@ -587,6 +588,57 @@ export class YieldController {
       console.error("YieldController.proofOfYield error:", error);
       return res.status(503).json({
         error: "Proof of yield service temporarily unavailable",
+      });
+    }
+  }
+
+  // ========== PROOF OF RESERVE (permissionless) ==========
+
+  static async proofOfReserve(req: Request, res: Response) {
+    try {
+      if (!isArciumEnabled()) {
+        return res.status(503).json({
+          error: "Arcium MPC is not enabled. Set ARCIUM_ENABLED=true.",
+        });
+      }
+
+      // If threshold not provided, aggregate total deposited from active VaultShares
+      let thresholdLamports: bigint;
+      if (req.query.threshold !== undefined) {
+        const parsed = Number(req.query.threshold);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return res.status(400).json({ error: "Invalid threshold parameter" });
+        }
+        thresholdLamports = BigInt(Math.round(parsed));
+      } else {
+        const { VaultShare } = await import("../models/VaultShare");
+        const agg = await VaultShare.aggregate([
+          { $match: { status: "active" } },
+          { $group: { _id: null, total: { $sum: "$depositAmountLamports" } } },
+        ]);
+        const totalLamports = agg.length > 0 ? agg[0].total : 0;
+        thresholdLamports = BigInt(Math.round(totalLamports));
+      }
+
+      const enhancementsService = getYieldMpcEnhancementsService();
+      const result = await enhancementsService.proofOfReserve(thresholdLamports);
+
+      if (!result.success) {
+        return res.status(503).json({
+          error: "MPC computation unavailable",
+          details: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        isSolvent: result.data?.isSolvent,
+        threshold: thresholdLamports.toString(),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("YieldController.proofOfReserve error:", error);
+      return res.status(500).json({
+        error: "Proof of reserve service temporarily unavailable",
       });
     }
   }

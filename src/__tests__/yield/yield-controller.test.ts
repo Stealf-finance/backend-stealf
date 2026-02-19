@@ -72,15 +72,31 @@ jest.mock("../../services/yield/privacy-yield.service", () => ({
 }));
 
 const mockProofOfYield = jest.fn();
+const mockVerifyWithdrawal = jest.fn().mockResolvedValue({ success: true, data: { sufficient: true } });
 
 jest.mock("../../services/yield/arcium-vault.service", () => ({
+  isArciumEnabled: () => true,
   getArciumVaultService: () => ({
     proofOfYield: mockProofOfYield,
     recordDeposit: jest.fn().mockResolvedValue({ success: true }),
-    verifyWithdrawal: jest.fn().mockResolvedValue({ success: true, data: { sufficient: true } }),
+    verifyWithdrawal: mockVerifyWithdrawal,
     updateEncryptedTotal: jest.fn().mockResolvedValue({ success: true }),
     ensureUserShare: jest.fn().mockResolvedValue(null),
   }),
+}));
+
+jest.mock("../../services/yield/yield-mpc-enhancements.service", () => ({
+  getYieldMpcEnhancementsService: () => ({
+    proofOfReserve: jest.fn().mockResolvedValue({ success: true, data: { isSolvent: true } }),
+    computeYieldDistribution: jest.fn().mockResolvedValue({ success: true }),
+    takeBalanceSnapshot: jest.fn().mockResolvedValue({ success: true }),
+  }),
+}));
+
+jest.mock("../../models/VaultShare", () => ({
+  VaultShare: {
+    aggregate: jest.fn().mockResolvedValue([{ _id: null, total: 0 }]),
+  },
 }));
 
 jest.mock("../../services/yield/auto-sweep.service", () => ({
@@ -110,6 +126,7 @@ function mockRes(): any {
 describe("YieldController - Integration", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockVerifyWithdrawal.mockResolvedValue({ success: true, data: { sufficient: true } });
   });
 
   // ==================== DEPOSIT ====================
@@ -152,13 +169,12 @@ describe("YieldController - Integration", () => {
       );
     });
 
-    it("should route private SOL deposit to Arcium-enhanced privacy service", async () => {
-      mockArciumPrivateSolDeposit.mockResolvedValue({
-        success: true,
-        shareIds: ["share-1", "share-2"],
-        batchId: "batch-abc",
-        denominationsUsed: [1, 0.5],
-        surplusSol: 0,
+    it("should route private SOL deposit to buildPrivateDepositTransaction (2-step flow)", async () => {
+      // Private SOL deposit = step 1 only: build TX for user to sign.
+      // Arcium MPC recording happens non-blocking at /confirm step.
+      mockBuildPrivateDepositTx.mockResolvedValue({
+        transaction: "private-deposit-tx-base64",
+        authorityAddress: "AuthWallet123",
       });
 
       const req = mockReq({ amount: 1.5, vaultType: "sol_jito", private: true });
@@ -166,10 +182,10 @@ describe("YieldController - Integration", () => {
 
       await YieldController.deposit(req, res);
 
-      expect(mockArciumPrivateSolDeposit).toHaveBeenCalledWith("user123", 1.5, "sol_jito");
+      expect(mockBuildPrivateDepositTx).toHaveBeenCalledWith("PubKey123", 1.5);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ success: true, shareIds: ["share-1", "share-2"] })
+        expect.objectContaining({ transaction: "private-deposit-tx-base64" })
       );
     });
 
@@ -270,10 +286,10 @@ describe("YieldController - Integration", () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    it("should route private SOL withdraw to Arcium-verified privacy service", async () => {
-      mockArciumPrivateSolWithdraw.mockResolvedValue({
+    it("should route private SOL withdraw through Arcium verifyWithdrawal then executePrivateWithdraw", async () => {
+      // Controller: verifyWithdrawal (Arcium MPC gate) → executePrivateWithdraw (yield service)
+      mockExecutePrivateWithdraw.mockResolvedValue({
         success: true,
-        sufficient: true,
         shareId: "share-w-1",
         estimatedSolOut: 0.95,
         privacyPoolTx: "pool-withdraw-sig",
@@ -284,14 +300,14 @@ describe("YieldController - Integration", () => {
 
       await YieldController.withdraw(req, res);
 
-      expect(mockArciumPrivateSolWithdraw).toHaveBeenCalledWith("user123", 1, "sol_jito", "PubKey123");
+      expect(mockExecutePrivateWithdraw).toHaveBeenCalledWith("user123", 1, "sol_jito", "PubKey123");
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    it("should return 422 when Arcium verification says insufficient balance", async () => {
-      mockArciumPrivateSolWithdraw.mockResolvedValue({
+    it("should return 422 when Arcium verifyWithdrawal says insufficient balance", async () => {
+      mockVerifyWithdrawal.mockResolvedValueOnce({
         success: true,
-        sufficient: false,
+        data: { sufficient: false },
       });
 
       const req = mockReq({ amount: 100, vaultType: "sol_jito", private: true });
@@ -299,7 +315,6 @@ describe("YieldController - Integration", () => {
 
       await YieldController.withdraw(req, res);
 
-      expect(mockArciumPrivateSolWithdraw).toHaveBeenCalledWith("user123", 100, "sol_jito", "PubKey123");
       expect(res.status).toHaveBeenCalledWith(422);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ sufficient: false })

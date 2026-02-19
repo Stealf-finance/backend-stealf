@@ -55,6 +55,7 @@ export interface IVaultShare extends Document {
   encryptedOnChain?: boolean;
   batchId?: string;
   batchStatus?: "pending" | "staked" | "failed";
+  snapshotIndex?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -126,6 +127,10 @@ const vaultShareSchema = new Schema<IVaultShare>(
     batchStatus: {
       type: String,
       enum: ["pending", "staked", "failed"],
+    },
+    snapshotIndex: {
+      type: Number,
+      default: 0,
     },
   },
   {

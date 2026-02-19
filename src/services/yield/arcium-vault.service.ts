@@ -53,6 +53,21 @@ interface EncryptedInput {
   nonce: BN;
 }
 
+export interface ArciumVaultHelpers {
+  encryptAmount: (amount: bigint) => EncryptedInput;
+  getArciumAccounts: (computationOffset: BN, compDefName: string) => ReturnType<ArciumVaultService["getArciumAccounts"]>;
+  awaitFinalizationWithTimeout: (computationOffset: BN) => Promise<string>;
+  executeMpcWithRetry: <T>(
+    operationName: string,
+    operation: (computationOffset: BN) => Promise<MpcResult<T>>
+  ) => Promise<MpcResult<T>>;
+  hashUserId: (userId: string) => Buffer;
+  getVaultStatePDA: () => PublicKey;
+  getUserSharePDA: (userIdHash: Buffer) => PublicKey;
+  getProgram: () => Program;
+  getMxePublicKey: () => Promise<Uint8Array>;
+}
+
 // ========== SERVICE ==========
 
 class ArciumVaultService {
@@ -421,6 +436,27 @@ class ArciumVaultService {
     }
 
     return userSharePDA;
+  }
+
+  // ========== PUBLIC HELPERS ACCESSOR ==========
+
+  public getHelpers(): ArciumVaultHelpers {
+    return {
+      encryptAmount: (amount: bigint) => this.encryptAmount(amount),
+      getArciumAccounts: (computationOffset: BN, compDefName: string) =>
+        this.getArciumAccounts(computationOffset, compDefName),
+      awaitFinalizationWithTimeout: (computationOffset: BN) =>
+        this.awaitFinalizationWithTimeout(computationOffset),
+      executeMpcWithRetry: <T>(
+        operationName: string,
+        operation: (computationOffset: BN) => Promise<MpcResult<T>>
+      ) => this.executeMpcWithRetry(operationName, operation),
+      hashUserId: ArciumVaultService.hashUserId,
+      getVaultStatePDA: () => this.getVaultStatePDA(),
+      getUserSharePDA: (userIdHash: Buffer) => this.getUserSharePDA(userIdHash),
+      getProgram: () => this.getProgram(),
+      getMxePublicKey: () => this.getMxePublicKey(),
+    };
   }
 
   // ========== HELPERS ==========

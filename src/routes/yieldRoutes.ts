@@ -4,6 +4,9 @@ import { YieldController } from "../controllers/YieldController";
 
 const router = Router();
 
+// Permissionless endpoint — registered BEFORE verifyAuth
+router.get("/reserve-proof", YieldController.proofOfReserve);
+
 // All yield routes require authentication
 router.use(verifyAuth);
 
