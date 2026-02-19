@@ -11,6 +11,11 @@ export interface IUser extends Document{
     createdAt: Date;
     updateAt: Date;
     lastLoginAt?: Date;
+    // Yield-to-Card auto-sweep
+    autoSweepEnabled: boolean;
+    autoSweepInterval: 'daily' | 'weekly';
+    autoSweepMinYield: number; // Minimum yield in SOL before sweeping
+    autoSweepVaultType: 'sol_jito' | 'sol_marinade';
 }
 
 const userSchema = new Schema<IUser>({
@@ -55,6 +60,25 @@ const userSchema = new Schema<IUser>({
     },
     lastLoginAt: {
         type: Date,
+    },
+    // Yield-to-Card auto-sweep
+    autoSweepEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    autoSweepInterval: {
+        type: String,
+        enum: ['daily', 'weekly'],
+        default: 'weekly',
+    },
+    autoSweepMinYield: {
+        type: Number,
+        default: 0.01, // 0.01 SOL minimum
+    },
+    autoSweepVaultType: {
+        type: String,
+        enum: ['sol_jito', 'sol_marinade'],
+        default: 'sol_jito',
     },
 }, {
     timestamps: true

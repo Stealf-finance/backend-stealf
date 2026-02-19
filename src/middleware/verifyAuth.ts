@@ -82,7 +82,7 @@ export async function verifyAuth(req: Request, res: Response, next: NextFunction
                     userId: walletPayload.mongoUserId,
                     organizationId: walletPayload.organizationId,
                     expiry: 0,
-                    publicKey: "",
+                    publicKey: user.stealf_wallet || user.cash_wallet || "",
                     mongoUserId: walletPayload.mongoUserId,
                 };
 

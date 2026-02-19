@@ -9,7 +9,7 @@ interface CoinGeckoResponse {
 
 export class SolPriceService {
 
-    private static CACHE_DURATION = 300; // 5 minutes
+    private static CACHE_DURATION = 1800; // 30 minutes
     private static CACHE_KEY = 'sol_price';
     private static pendingFetch: Promise<number> | null = null;
 
@@ -42,7 +42,10 @@ export class SolPriceService {
                 throw new Error('COINGECKO_URL not defined in environment variables');
             }
 
-            const response = await axios.get<CoinGeckoResponse>(COINGECKO_URL);
+            const response = await axios.get<CoinGeckoResponse>(COINGECKO_URL, {
+                headers: { 'Accept': 'application/json' },
+                timeout: 5000,
+            });
             const price = response.data.solana.usd;
 
             await redisClient.set(
