@@ -11,7 +11,7 @@ declare global {
                 organizationId: string;
                 expiry: number;
                 publicKey: string;
-                mongoUserId?: string; // MongoDB ObjectId
+                mongoUserId?: string;
             };
         }
     }
@@ -78,7 +78,7 @@ export async function verifyAuth(req: Request, res: Response, next: NextFunction
 
         req.user = {
             ...decoded,
-            mongoUserId: userExist._id.toString(), // Add MongoDB ObjectId
+            mongoUserId: userExist._id.toString(),
         };
 
         next();

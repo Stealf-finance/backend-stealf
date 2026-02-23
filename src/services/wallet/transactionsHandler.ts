@@ -4,8 +4,6 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getSocketService } from '../socket/socketService';
 import { SolPriceService } from '../pricing/solPrice';
 import { TokenMetadataService } from '../token/TokenMetadataService';
-
-import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
 import { WalletBalance } from '../helius/walletInit';
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -79,12 +77,6 @@ export class TransactionHandler {
                     const { fromUserAccount, toUserAccount, amount } = transfer;
                     const solAmount = (amount || 0) / LAMPORTS_PER_SOL;
 
-                    // Vault deposit detection
-                    if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                        log(`  → Vault SOL deposit detected!`);
-                        await handleVaultDeposit(transaction, transfer);
-                    }
-
                     if (fromUserAccount) {
                         this.addDelta(deltas, fromUserAccount, null, -solAmount);
                         affectedWallets.add(fromUserAccount);
@@ -98,12 +90,6 @@ export class TransactionHandler {
                 // Accumulate SPL token deltas
                 for (const transfer of tokenTransfers) {
                     const { fromUserAccount, toUserAccount, tokenAmount, mint } = transfer;
-
-                    // Vault deposit detection
-                    if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                        log(`  → Vault token deposit detected!`);
-                        await handleVaultDeposit(transaction, transfer, mint ?? undefined);
-                    }
 
                     if (fromUserAccount) {
                         this.addDelta(deltas, fromUserAccount, mint || null, -(tokenAmount || 0));
