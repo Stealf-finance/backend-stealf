@@ -1,19 +1,21 @@
+// dotenv MUST be loaded before any other import that reads process.env at module load time
+import 'dotenv/config';
+
 import express from 'express';
 import mongoose from 'mongoose';
 import { createServer } from 'http';
 import path from 'path';
-import dotenv from 'dotenv';
 import userRoutes from './routes/userRoutes'
 import walletRoutes from './routes/walletRoutes';
 import  webhookHeliusRoutes  from './routes/webhookHeliusRoutes'
 import privateTransferRoutes from './routes/privateTransferRoutes';
 import swapRoutes from './routes/swapRoutes';
 import yieldRoutes from './routes/yieldRoutes';
+import stealthRoutes from './routes/stealth.routes';
 import { errorHandler } from './middleware/errorHandler';
+import { getStealthScannerService } from './services/stealth/stealth-scanner.service';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
 import { getSocketService } from './services/socket/socketService';
-
-dotenv.config();
 
 const app = express();
 
@@ -49,6 +51,7 @@ app.use('/api/private-transfer', privateTransferRoutes);
 
 app.use('/api/swap', swapRoutes);
 app.use('/api/yield', yieldRoutes);
+app.use('/api/stealth', stealthRoutes);
 app.use('/api/helius', webhookHeliusRoutes );
 
 app.get('/health', (req, res) => {
@@ -72,6 +75,9 @@ async function start() {
     const socketService = getSocketService();
     socketService.initialize(httpServer);
     console.log('Socket.io initialized');
+
+    // Démarrer le job de scanning stealth (60s interval)
+    getStealthScannerService().startScanningJob();
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);

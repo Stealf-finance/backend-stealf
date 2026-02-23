@@ -1,7 +1,8 @@
 import { Turnkey } from "@turnkey/sdk-server";
-import { Connection, Transaction } from "@solana/web3.js";
+import { Connection } from "@solana/web3.js";
 
 let _turnkeyClient: Turnkey | null = null;
+let _connection: Connection | null = null;
 
 function getTurnkeyClient(): Turnkey {
   if (!_turnkeyClient) {
@@ -15,65 +16,68 @@ function getTurnkeyClient(): Turnkey {
   return _turnkeyClient;
 }
 
+function getConnection(): Connection {
+  if (!_connection) {
+    _connection = new Connection(
+      process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
+      "confirmed"
+    );
+  }
+  return _connection;
+}
+
 /**
  * Signs and sends a transaction from a user's Cash wallet via Turnkey.
+ * Pass cashWalletAddress to skip getWallets/getWalletAccounts round-trips (-2 API calls).
  *
  * @param subOrgId - The Turnkey sub-organization ID
  * @param unsignedTransactionHex - Hex-encoded unsigned transaction
+ * @param cashWalletAddress - Solana address of the cash wallet (stored in DB)
  * @returns Transaction signature
  */
 export async function signAndSendCashWalletTransaction(
   subOrgId: string,
-  unsignedTransactionHex: string
+  unsignedTransactionHex: string,
+  cashWalletAddress?: string
 ): Promise<string> {
   const turnkey = getTurnkeyClient();
   const client = turnkey.apiClient();
 
-  console.log(`[TurnkeySign] Signing for subOrg: ${subOrgId}`);
+  let signWith = cashWalletAddress;
 
-  // Get the wallet for this sub-org
-  const walletsResponse = await client.getWallets({
-    organizationId: subOrgId,
-  });
-
-  const wallet = walletsResponse.wallets?.[0];
-  if (!wallet) {
-    throw new Error("No wallet found in sub-organization");
+  if (!signWith) {
+    // Fallback: resolve address from Turnkey (2 extra round-trips)
+    const walletsResponse = await client.getWallets({ organizationId: subOrgId });
+    const wallet = walletsResponse.wallets?.[0];
+    if (!wallet) throw new Error("No wallet found in sub-organization");
+    const accountsResponse = await client.getWalletAccounts({
+      organizationId: subOrgId,
+      walletId: wallet.walletId,
+    });
+    const account = accountsResponse.accounts?.[0];
+    if (!account) throw new Error("No wallet account found");
+    signWith = account.address;
   }
 
-  // Get wallet accounts to find the Solana address
-  const accountsResponse = await client.getWalletAccounts({
-    organizationId: subOrgId,
-    walletId: wallet.walletId,
-  });
+  console.log(`[TurnkeySign] Signing with address: ${signWith}`);
 
-  const account = accountsResponse.accounts?.[0];
-  if (!account) {
-    throw new Error("No wallet account found");
-  }
-
-  console.log(`[TurnkeySign] Signing with address: ${account.address}`);
-
-  // Sign the transaction via Turnkey's signTransaction (designed for Solana)
   const signResult = await client.signTransaction({
     organizationId: subOrgId,
-    signWith: account.address,
+    signWith,
     unsignedTransaction: unsignedTransactionHex,
     type: "TRANSACTION_TYPE_SOLANA",
   });
 
-  console.log(`[TurnkeySign] Transaction signed successfully`);
-
-  // Send the signed transaction
+  const conn = getConnection();
   const signedTxBytes = Buffer.from(signResult.signedTransaction, "hex");
-  const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
-  const connection = new Connection(rpcUrl, "confirmed");
-
-  const txSignature = await connection.sendRawTransaction(signedTxBytes, {
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('processed');
+  const txSignature = await conn.sendRawTransaction(signedTxBytes, {
     skipPreflight: false,
-    preflightCommitment: "confirmed",
+    preflightCommitment: "processed",
   });
 
   console.log(`[TurnkeySign] Transaction sent: ${txSignature}`);
+  await conn.confirmTransaction({ signature: txSignature, blockhash, lastValidBlockHeight }, 'processed');
+  console.log(`[TurnkeySign] Transaction confirmed (processed): ${txSignature}`);
   return txSignature;
 }

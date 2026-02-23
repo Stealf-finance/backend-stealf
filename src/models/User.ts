@@ -16,6 +16,12 @@ export interface IUser extends Document{
     autoSweepInterval: 'daily' | 'weekly';
     autoSweepMinYield: number; // Minimum yield in SOL before sweeping
     autoSweepVaultType: 'sol_jito' | 'sol_marinade';
+    // Stealth addresses (EIP-5564 adapté Solana) — Requirements 1.3, 1.4
+    stealthEnabled: boolean;
+    stealthSpendingPublic?: string;       // base58 32 bytes — clé publique ed25519
+    stealthViewingPublic?: string;        // base58 32 bytes — clé publique X25519
+    stealthViewingPrivateEnc?: string;    // AES-256-GCM chiffrée (format iv:tag:ciphertext)
+    lastStealthScanAt?: Date;
 }
 
 const userSchema = new Schema<IUser>({
@@ -80,8 +86,28 @@ const userSchema = new Schema<IUser>({
         enum: ['sol_jito', 'sol_marinade'],
         default: 'sol_jito',
     },
+    // Stealth addresses
+    stealthEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    stealthSpendingPublic: {
+        type: String,
+    },
+    stealthViewingPublic: {
+        type: String,
+    },
+    stealthViewingPrivateEnc: {
+        type: String,
+    },
+    lastStealthScanAt: {
+        type: Date,
+    },
 }, {
     timestamps: true
 });
+
+// Index pour le scanner stealth (uniquement les users avec stealth activé)
+userSchema.index({ stealthEnabled: 1 });
 
 export const User = mongoose.model<IUser>('User', userSchema);

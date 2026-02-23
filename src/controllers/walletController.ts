@@ -136,7 +136,8 @@ export class WalletController {
 
             const txSignature = await signAndSendCashWalletTransaction(
                 user.turnkey_subOrgId,
-                unsignedTransaction
+                unsignedTransaction,
+                user.cash_wallet || undefined
             );
 
             return res.status(200).json({

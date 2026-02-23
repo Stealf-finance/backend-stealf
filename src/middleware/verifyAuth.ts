@@ -3,7 +3,10 @@ import { verifySessionJwtSignature } from "@turnkey/crypto";
 import jwt from "jsonwebtoken";
 import { User } from '../models/User';
 
-const WALLET_JWT_SECRET = process.env.WALLET_JWT_SECRET || "stealf-wallet-auth-secret-change-in-production";
+if (!process.env.WALLET_JWT_SECRET) {
+  throw new Error("WALLET_JWT_SECRET environment variable is required");
+}
+const WALLET_JWT_SECRET = process.env.WALLET_JWT_SECRET as string;
 
 declare global {
     namespace Express {
