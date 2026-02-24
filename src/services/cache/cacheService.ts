@@ -1,4 +1,5 @@
 import redisClient from '../../config/redis';
+import logger from '../../config/logger';
 
 export class CacheService {
     static async get<T>(key: string): Promise<T | null> {
@@ -7,7 +8,7 @@ export class CacheService {
             if (!cached) return null;
             return JSON.parse(cached) as T;
         } catch (error){
-            console.error('Cache get error:', error);
+            logger.error({ err: error, key }, 'Cache get error');
             return null;
         }
     }
@@ -25,7 +26,7 @@ export class CacheService {
                 );
             }
         } catch (error) {
-            console.error('Cache set error:', error);
+            logger.error({ err: error, key }, 'Cache set error');
         }
     }
 
@@ -33,7 +34,7 @@ export class CacheService {
         try {
             await redisClient.del(key);
         } catch (error) {
-            console.error('Cache del error:', error);
+            logger.error({ err: error, key }, 'Cache del error');
         }
     }
 

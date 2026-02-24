@@ -1,6 +1,7 @@
 import { User } from "../../models/User";
 import { getHeliusWebhookManager } from '../helius/webhookManager';
 import { privacyBalanceService } from '../privacycash/PrivacyBalanceService';
+import logger from '../../config/logger';
 
 export async function createUser(email: string, pseudo: string, cash_wallet: string, stealf_wallet: string, turnkey_subOrgId: string){
 
@@ -22,16 +23,16 @@ export async function createUser(email: string, pseudo: string, cash_wallet: str
         const webhookManager = getHeliusWebhookManager();
 
         await webhookManager.addUserWallets(cash_wallet, stealf_wallet);
-        console.log('Wallets successfully added to helius webhook!');
+        logger.info('Wallets successfully added to Helius webhook');
     } catch (error) {
-        console.error('Failed to add wallets to webhook:', error);
+        logger.error({ err: error }, 'Failed to add wallets to webhook');
     }
 
     try {
         await privacyBalanceService.getOrCreateBalance(user._id.toString());
-        console.log('Private balance initialized for user:', user._id);
+        logger.info('Private balance initialized for user');
     } catch (error) {
-        console.error('Failed to initialize private balance:', error);
+        logger.error({ err: error }, 'Failed to initialize private balance');
     }
 
     return user;

@@ -2,6 +2,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { CacheService } from "../cache/cacheService";
 import { parseHeliusTransaction } from "../wallet/transactionParser";
 import { TokenMetadataService } from "../token/TokenMetadataService";
+import logger from "../../config/logger";
 
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
@@ -107,7 +108,7 @@ export const solanaService = {
 
             return result;
         } catch (error) {
-            console.error('Error fetching balance:', error);
+            logger.error({ err: error }, 'Error fetching balance');
             throw error;
         }
     },
@@ -119,7 +120,7 @@ export const solanaService = {
         const cached = await CacheService.get<any[]>(cacheKey);
 
         if (cached !== null){
-            console.log(`[WalletInit] Returning ${cached.length} transactions from cache`);
+            logger.debug({ count: cached.length }, 'WalletInit: returning transactions from cache');
             return cached.slice(0, limit);
         }
 
@@ -129,9 +130,9 @@ export const solanaService = {
                 throw new Error('HELIUS_API_KEY not found in environment variables');
             }
 
-            console.log(`[WalletInit] Fetching transactions from Helius API for ${address}`);
+            logger.debug({ address }, 'WalletInit: fetching transactions from Helius API');
             const baseUrl = `https://api-mainnet.helius-rpc.com/v0/addresses/${address}/transactions/?api-key=${heliusApiKey}`;
-            
+
             let url = baseUrl;
             let lastSignature: string | null = null;
             let allTransactions: any[] = [];
@@ -144,9 +145,8 @@ export const solanaService = {
                 const response = await fetch(url);
 
                 if (!response.ok) {
-                    console.error(`Helius API error: ${response.status}`);
                     const errorText = await response.text();
-                    console.error('Error response:', errorText);
+                    logger.error({ status: response.status, body: errorText }, 'Helius API error');
                     break;
                 }
 
@@ -174,7 +174,7 @@ export const solanaService = {
             return rawTransactions.slice(0, limit);
 
         } catch (error) {
-            console.error('Error fetching transactions:', error);
+            logger.error({ err: error }, 'Error fetching transactions');
             throw error;
         }
     }

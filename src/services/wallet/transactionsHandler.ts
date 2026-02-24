@@ -7,17 +7,9 @@ import { TokenMetadataService } from '../token/TokenMetadataService';
 
 import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
 import { WalletBalance } from '../helius/walletInit';
+import baseLogger from '../../config/logger';
 
-const isDev = process.env.NODE_ENV === 'development';
-const TAG = '[TransactionHandler]';
-
-function log(...args: unknown[]) {
-    if (isDev) console.log(TAG, ...args);
-}
-
-function logError(...args: unknown[]) {
-    console.error(TAG, ...args);
-}
+const txLogger = baseLogger.child({ module: 'TransactionHandler' });
 
 interface Transfer {
     fromUserAccount?: string;
@@ -40,7 +32,7 @@ export class TransactionHandler {
     private static getVaultAddress(): string {
         const address = process.env.VAULT_PUBLIC_KEY;
         if (!address) {
-            logError('VAULT_PUBLIC_KEY not configured');
+            txLogger.error('VAULT_PUBLIC_KEY not configured');
         }
         return address || '';
     }
@@ -48,7 +40,7 @@ export class TransactionHandler {
     static async handleTransaction(payload: any) {
         try {
             const transactions = Array.isArray(payload) ? payload : [payload];
-            log(`Received ${transactions.length} transaction(s)`);
+            txLogger.debug({ count: transactions.length }, 'Received transactions');
 
             const VAULT_ADDRESS = this.getVaultAddress();
 
@@ -58,18 +50,17 @@ export class TransactionHandler {
                 const tokenTransfers: Transfer[] = transaction?.tokenTransfers || [];
 
                 if (!signature || (nativeTransfers.length === 0 && tokenTransfers.length === 0)) {
-                    log('Skipping — no signature or no transfers');
+                    txLogger.debug('Skipping: no signature or no transfers');
                     continue;
                 }
 
                 if (this.processedTransactions.has(signature)) {
-                    log(`Skipping — already processed: ${signature.slice(0, 12)}...`);
+                    txLogger.debug({ signature: signature.slice(0, 12) }, 'Skipping: already processed');
                     continue;
                 }
                 this.processedTransactions.add(signature);
 
-                log(`--- Processing ${signature.slice(0, 12)}... ---`);
-                log(`  Native transfers: ${nativeTransfers.length} | Token transfers: ${tokenTransfers.length}`);
+                txLogger.debug({ signature: signature.slice(0, 12), nativeTransfers: nativeTransfers.length, tokenTransfers: tokenTransfers.length }, 'Processing transaction');
 
                 const deltas: WalletDeltas = {};
                 const affectedWallets = new Set<string>();
@@ -81,7 +72,7 @@ export class TransactionHandler {
 
                     // Vault deposit detection
                     if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                        log(`  → Vault SOL deposit detected!`);
+                        txLogger.debug('Vault SOL deposit detected');
                         await handleVaultDeposit(transaction, transfer);
                     }
 
@@ -101,7 +92,7 @@ export class TransactionHandler {
 
                     // Vault deposit detection
                     if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                        log(`  → Vault token deposit detected!`);
+                        txLogger.debug('Vault token deposit detected');
                         await handleVaultDeposit(transaction, transfer, mint ?? undefined);
                     }
 
@@ -125,13 +116,13 @@ export class TransactionHandler {
                     await this.saveTransactionToHistory(walletAddress, parsedTx);
                 }
 
-                log(`  Affected wallets: ${[...affectedWallets].map(w => w.slice(0, 8) + '...').join(', ')}`);
+                txLogger.debug({ affectedWallets: [...affectedWallets].map(w => w.slice(0, 8)) }, 'Affected wallets');
             }
 
-            log('All transactions processed');
+            txLogger.debug('All transactions processed');
 
         } catch (error) {
-            logError('Failed to handle transactions:', error);
+            txLogger.error({ err: error }, 'Failed to handle transactions');
             throw error;
         }
     }
@@ -198,7 +189,7 @@ export class TransactionHandler {
                     token.balanceUSD = 0;
                 }
 
-                log(`  Balance: ${walletAddress.slice(0, 8)}... | ${token.tokenSymbol} ${delta > 0 ? '+' : ''}${delta} → ${token.balance}`);
+                txLogger.debug({ wallet: walletAddress.slice(0, 8), symbol: token.tokenSymbol, delta, newBalance: token.balance }, 'Balance updated');
             }
 
             walletBalance.totalUSD = walletBalance.tokens.reduce((sum, t) => sum + t.balanceUSD, 0);
@@ -206,7 +197,7 @@ export class TransactionHandler {
             await CacheService.set(balanceKey, walletBalance, 0);
             getSocketService().emitBalanceUpdate(walletAddress, walletBalance);
         } catch (error) {
-            logError(`Failed to apply deltas for ${walletAddress}:`, error);
+            txLogger.error({ err: error, wallet: walletAddress.slice(0, 8) }, 'Failed to apply deltas');
             throw error;
         }
     }
@@ -225,7 +216,7 @@ export class TransactionHandler {
             );
 
             if (isDuplicate) {
-                log(`  History: duplicate skipped for ${walletAddress.slice(0, 8)}...`);
+                txLogger.debug({ wallet: walletAddress.slice(0, 8) }, 'History: duplicate skipped');
                 return;
             }
 
@@ -235,9 +226,9 @@ export class TransactionHandler {
 
             getSocketService().emitNewTransaction(walletAddress, transaction);
 
-            log(`  History updated: ${walletAddress.slice(0, 8)}... (${newHistory.length} entries)`);
+            txLogger.debug({ wallet: walletAddress.slice(0, 8), entries: newHistory.length }, 'History updated');
         } catch (error) {
-            logError(`Failed to save history for ${walletAddress}:`, error);
+            txLogger.error({ err: error, wallet: walletAddress.slice(0, 8) }, 'Failed to save history');
             throw error;
         }
     }

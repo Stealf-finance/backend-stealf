@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { TransactionHandler } from '../services/wallet/transactionsHandler';
 import { heliusWebhookPayloadSchema } from '../utils/validations';
+import logger from '../config/logger';
 
 export class WebhookHeliusController {
 
@@ -12,12 +13,12 @@ export class WebhookHeliusController {
             const expectedSecret = process.env.HELIUS_WEBHOOK_SECRET;
 
             if (!expectedSecret) {
-                console.error('HELIUS_WEBHOOK_SECRET not configured in environment');
+                logger.error('HELIUS_WEBHOOK_SECRET not configured in environment');
                 return res.status(500).json({ success: false, error: 'Server configuration error' });
             }
 
             if (!authHeader || authHeader !== expectedSecret) {
-                console.error('Unauthorized webhook request - invalid secret');
+                logger.warn('Unauthorized webhook request - invalid secret');
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
 
@@ -28,10 +29,10 @@ export class WebhookHeliusController {
             return res.status(200).json({ success: true});
         } catch (error){
             if (error instanceof z.ZodError) {
-                console.error('Webhook payload validation failed:', error.issues);
+                logger.warn({ issues: error.issues }, 'Webhook payload validation failed');
                 return res.status(400).json({ success: false, error: 'Invalid payload format' });
             }
-            console.error('Helius Webhook Error:', error);
+            logger.error({ err: error }, 'Helius webhook error');
             return res.status(500).json({ success: false });
         }
     }

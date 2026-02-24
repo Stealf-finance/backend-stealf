@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger';
 
 // SECURITY: Default to production mode if NODE_ENV not explicitly set to 'development'
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -10,7 +11,7 @@ export const errorHandler = (
     next: NextFunction
 ) => {
     // Log full error for debugging (server-side only)
-    console.error('Error:', isDevelopment ? error : error.message);
+    logger.error({ err: error, path: req.path, method: req.method }, 'Unhandled error');
 
     if (error.name === 'MongoError' || error.name === 'MongoServerError') {
         const mongoError = error as any;

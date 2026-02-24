@@ -1,6 +1,7 @@
 import { createHelius } from 'helius-sdk';
 import { WebhookHelius } from '../../models/WebhookHelius';
 import { User } from '../../models/User';
+import logger from '../../config/logger';
 
 class HeliusWebhookManager {
     private helius;
@@ -19,12 +20,12 @@ class HeliusWebhookManager {
             let config  = await WebhookHelius.findById(this.webhookConfigId);
 
             if (config){
-                console.log('Webhook config found in DB:', config.webhookId);
+                logger.info({ webhookId: config.webhookId }, 'Webhook config found in DB');
 
                 return config;
             }
 
-            console.log('No webhook config found, creating new webhook...');
+            logger.info('No webhook config found, creating new webhook');
 
             const users = await User.find();
             const wallets: string[] = [];
@@ -40,7 +41,7 @@ class HeliusWebhookManager {
                 webhookType: 'enhanced',
             });
 
-            console.log('Webhook created:', webhook.webhookID);
+            logger.info({ webhookId: webhook.webhookID }, 'Webhook created');
 
             config = await WebhookHelius.create({
                 _id: this.webhookConfigId,
@@ -52,11 +53,11 @@ class HeliusWebhookManager {
                 status: 'active',
             });
 
-            console.log('Webhook config saved to MongoDB');
+            logger.info('Webhook config saved to MongoDB');
             return config;
 
         } catch (error){
-            console.error('Failed to initialize webhook:', error);
+            logger.error({ err: error }, 'Failed to initialize webhook');
             throw error;
         }
     }
@@ -74,7 +75,7 @@ class HeliusWebhookManager {
             if (stealf_wallet) walletsToAdd.push(stealf_wallet);
 
             if (walletsToAdd.length === 0) {
-                console.log('No wallets to add');
+                logger.debug('No wallets to add');
                 return;
             }
 
@@ -120,10 +121,10 @@ class HeliusWebhookManager {
             config.accountCount = allAddresses.length;
             await config.save();
 
-            console.log(`Added ${walletsToAdd.length} wallet(s) to webhook ${config.webhookId} (total: ${allAddresses.length})`);
+            logger.info({ walletsAdded: walletsToAdd.length, webhookId: config.webhookId, totalAddresses: allAddresses.length }, 'Wallets added to webhook');
 
         } catch (error) {
-            console.error('Failed to add user wallets to webhook:', error);
+            logger.error({ err: error }, 'Failed to add user wallets to webhook');
             throw error;
         }
     }
