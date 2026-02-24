@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import logger from './logger';
 
 const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
     retryStrategy: (times) => {
@@ -10,11 +11,11 @@ const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379',
 });
 
 redisClient.on('connect', () => {
-    console.log('Redis connected');
+    logger.info('Redis connected');
 });
 
 redisClient.on('error', (err) => {
-    console.error('Redis error', err);
+    logger.error({ err }, 'Redis error');
 });
 
 export default redisClient;

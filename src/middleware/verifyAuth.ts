@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifySessionJwtSignature } from "@turnkey/crypto";
 import { User } from '../models/User';
+import logger from '../config/logger';
 
 declare global {
     namespace Express {
@@ -82,10 +83,10 @@ export async function verifyAuth(req: Request, res: Response, next: NextFunction
         };
 
         next();
-        console.log('JWT verified successfully!');
-        
+        logger.debug('JWT verified successfully');
+
     } catch (error) {
-        console.error('Auth verification error:', error);
+        logger.error({ err: error }, 'Auth verification error');
         return res.status(401).json({ error: 'Authentification failed' });
     }
 }

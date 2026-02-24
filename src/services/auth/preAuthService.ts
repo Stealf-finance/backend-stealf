@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { CacheService } from '../cache/cacheService';
+import logger from '../../config/logger';
 
 interface PreAuthPayload {
     sessionId: string;
@@ -44,7 +45,7 @@ export class PreAuthService {
 
         await this.storeSessionMapping(sessionId, email, pseudo);
 
-        console.log(`✅ Pre-auth token created for ${email} (session: ${sessionId})`);
+        logger.debug({ sessionId }, 'Pre-auth token created');
         return token;
     }
 
@@ -57,7 +58,7 @@ export class PreAuthService {
 
             return status;
         } catch (error) {
-            console.error('Invalid pre-auth token:', error);
+            logger.error({ err: error }, 'Invalid pre-auth token');
             return null;
         }
     }
@@ -67,7 +68,7 @@ export class PreAuthService {
         const sessionId = await CacheService.get<string>(mappingKey);
 
         if (!sessionId) {
-            console.warn(`No pre-auth session found for ${email}`);
+            logger.warn('No pre-auth session found');
             return;
         }
 
@@ -77,7 +78,7 @@ export class PreAuthService {
         if (status) {
             status.verified = true;
             await CacheService.set(redisKey, status, this.TOKEN_EXPIRY);
-            console.log(`Pre-auth session marked as verified for ${email}`);
+            logger.debug('Pre-auth session marked as verified');
         }
     }
 

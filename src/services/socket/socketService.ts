@@ -1,6 +1,8 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { socketAuthMiddleware } from '../../middleware/socketAuth';
+import { allowedOrigins } from '../../config/cors';
+import logger from '../../config/logger';
 
 class SocketService {
     private io: SocketIOServer | null = null;
@@ -8,8 +10,9 @@ class SocketService {
     initialize(httpServer: HTTPServer){
         this.io = new SocketIOServer(httpServer, {
             cors: {
-                origin: '*',
-                methods: ['GET', 'POST']
+                origin: allowedOrigins,
+                methods: ['GET', 'POST'],
+                credentials: true,
             }
         });
 
@@ -43,7 +46,7 @@ class SocketService {
 
     emitBalanceUpdate(walletAddress: string, walletBalance: { tokens: any[]; totalUSD: number }) {
         if (!this.io) {
-            console.warn('Socket.io not initialized');
+            logger.warn('Socket.io not initialized');
             return;
         }
 
@@ -57,7 +60,7 @@ class SocketService {
 
     emitNewTransaction(walletAddress: string, transaction: any) {
         if (!this.io){
-            console.warn('Socket.io is not initialized');
+            logger.warn('Socket.io not initialized');
             return;
         }
 
@@ -81,7 +84,7 @@ class SocketService {
         errorMessage?: string;
     }) {
         if (!this.io) {
-            console.warn('Socket.io not initialized');
+            logger.warn('Socket.io not initialized');
             return;
         }
 
@@ -96,13 +99,23 @@ class SocketService {
         usdc: number;
     }) {
         if (!this.io) {
-            console.warn('Socket.io not initialized');
+            logger.warn('Socket.io not initialized');
             return;
         }
 
         this.io.to(`user:${userId}`).emit('private-balance:updated', {
             balances,
             timestamp: new Date().toISOString()
+        });
+    }
+
+    close(): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.io) {
+                resolve();
+                return;
+            }
+            this.io.close(() => resolve());
         });
     }
 }

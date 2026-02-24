@@ -1,5 +1,6 @@
 import axios from 'axios';
 import redisClient from '../../config/redis';
+import logger from '../../config/logger';
 
 interface CoinGeckoResponse {
     solana: {
@@ -54,7 +55,7 @@ export class SolPriceService {
 
             return price;
         } catch (error) {
-            console.error('Error fetching SOL price:', error);
+            logger.error({ err: error }, 'Error fetching SOL price');
 
             const fallbackPrice = await redisClient.get(this.CACHE_KEY);
             if (fallbackPrice) {

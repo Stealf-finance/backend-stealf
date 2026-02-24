@@ -8,6 +8,7 @@ import { decodeSessionJwt } from '../middleware/verifyAuth';
 import { createUser } from '../services/auth/createUser';
 import * as magicLinkService from '../services/auth/magicLinkService';
 import { PreAuthService } from '../services/auth/preAuthService';
+import logger from '../config/logger';
 
 export class UserController {
 
@@ -50,7 +51,7 @@ export class UserController {
                         preAuthToken,
                     };
                 } catch (emailError) {
-                    console.error('Failed to send magic link:', emailError);
+                    logger.error({ err: emailError }, 'Failed to send magic link');
                     responseData = {
                         canProceed: false,
                         unavailable: [],
@@ -160,7 +161,7 @@ export class UserController {
         try {
             const { userId } = req.params;
 
-            console.log(userId);
+            logger.debug({ userId }, 'getUser called');
             const user = await User.findOne({ cash_wallet: userId });
             if (!user){
                 return res.status(404).json({ error: 'User not found '});
@@ -190,4 +191,3 @@ export class UserController {
 }
 
 export const userController = new UserController();
-

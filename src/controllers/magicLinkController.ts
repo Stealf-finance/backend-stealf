@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from '../services/auth/magicLinkService';
 import { PreAuthService } from '../services/auth/preAuthService';
+import logger from '../config/logger';
 
 export class MagicLinkController{
 
@@ -64,7 +65,7 @@ export class MagicLinkController{
                     </head>
                     <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 40px; text-align: center; background: #f5f5f5;">
                         <div style="background: white; padding: 40px; border-radius: 12px; max-width: 400px; margin: 0 auto;">
-                            <h1 style="color: #dc2626;">❌ Error</h1>
+                            <h1 style="color: #dc2626;">Error</h1>
                             <p style="color: #666;">Token is required</p>
                             <a href="${errorDeepLink}" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px;">
                                 Open Stealf App
@@ -139,7 +140,7 @@ export class MagicLinkController{
                     </html>
             `);
         } catch (error: any){
-            console.error('Error verifying magic link:', error);
+            logger.error({ err: error }, 'Error verifying magic link');
 
             const errorDeepLink = `stealf://auth/error?message=${encodeURIComponent(error.message || 'Invalid or expired token')}`;
 

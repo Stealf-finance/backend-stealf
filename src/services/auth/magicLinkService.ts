@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Resend } from 'resend';
 import { MagicLink } from '../../models/MagicLink';
+import logger from '../../config/logger';
 
 
 export function generateMagicToken(){
@@ -11,7 +12,7 @@ export function generateMagicToken(){
 }
 
 export async function sendMagicLink(email: string, pseudo: string){
-    console.log('sendMagicLink called for:', email);
+    logger.debug('sendMagicLink called');
 
     const { token, hash} = generateMagicToken();
 
@@ -22,7 +23,7 @@ export async function sendMagicLink(email: string, pseudo: string){
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
         used: false,
     });
-    console.log('🔵 MagicLink record created:', magicLinkRecord._id);
+    logger.debug({ recordId: magicLinkRecord._id }, 'MagicLink record created');
 
     const apiKey = process.env.RESEND_API_KEY;
 
@@ -32,7 +33,7 @@ export async function sendMagicLink(email: string, pseudo: string){
 
     const resend = new Resend(apiKey);
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
-    console.log('🔵 Backend URL:', backendUrl);
+    logger.debug({ backendUrl }, 'Backend URL for magic link');
 
     try {
         const result = await resend.emails.send({
@@ -49,16 +50,16 @@ export async function sendMagicLink(email: string, pseudo: string){
             <p>If you didn't request this, please ignore this email.</p>
             `
         });
-        console.log('Email sent successfully to:', email);
+        logger.info('Magic link email sent successfully');
     } catch (emailError) {
-        console.error('Failed to send email:', emailError);
+        logger.error({ err: emailError }, 'Failed to send magic link email');
         throw emailError;
     }
 
 }
 
 export async function verifyMagicLink(token: string): Promise<{ email: string; pseudo: string }> {
-    
+
     const tokenHash = crypto
         .createHash("sha256")
         .update(token)

@@ -1,27 +1,24 @@
 import axios, { isAxiosError } from 'axios';
+import baseLogger from '../../config/logger';
 
 const JUPITER_ULTRA_API = 'https://api.jup.ag/ultra/v1';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
-const isDev = process.env.NODE_ENV === 'development';
+const jupiterLogger = baseLogger.child({ module: 'Jupiter' });
 
 function logJupiter(method: string, url: string, params?: Record<string, string>, body?: unknown) {
-    if (!isDev) return;
-    console.log(`[Jupiter] ${method} ${url}`);
-    if (params) console.log('[Jupiter] params:', params);
-    if (body) console.log('[Jupiter] body:', body);
+    jupiterLogger.debug({ method, url, params, body }, 'Jupiter API request');
 }
 
 function logJupiterResponse(method: string, status: number, data: unknown) {
-    if (!isDev) return;
-    console.log(`[Jupiter] ${method} response ${status}:`, JSON.stringify(data, null, 2));
+    jupiterLogger.debug({ method, status, data }, 'Jupiter API response');
 }
 
 function logJupiterError(method: string, error: unknown) {
     if (isAxiosError(error) && error.response) {
-        console.error(`[Jupiter] ${method} error ${error.response.status}:`, error.response.data);
+        jupiterLogger.error({ method, status: error.response.status, data: error.response.data }, 'Jupiter API error');
     } else {
-        console.error(`[Jupiter] ${method} error:`, error);
+        jupiterLogger.error({ err: error, method }, 'Jupiter API error');
     }
 }
 

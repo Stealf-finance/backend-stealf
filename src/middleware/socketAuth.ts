@@ -2,6 +2,7 @@ import { Socket } from 'socket.io';
 import { verifySessionJwtSignature } from "@turnkey/crypto";
 import { User } from '../models/User';
 import { decodeSessionJwt } from './verifyAuth';
+import logger from '../config/logger';
 
 declare module 'socket.io' {
     interface Socket {
@@ -39,8 +40,8 @@ export async function socketAuthMiddleware(socket: Socket, next: (err?: Error) =
 
         next();
     } catch (error) {
-        console.error('Socket authentification error:', error);
+        logger.error({ err: error }, 'Socket authentication error');
         return next(new Error('Authentication failed'));
     }
-    
+
 }

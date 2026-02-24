@@ -1,15 +1,69 @@
 import rateLimit from "express-rate-limit";
+import type { Request, Response } from "express";
 
+// Existing limiter for /check-availability endpoint
 export const availabilityCheckLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 5,
     standardHeaders: false,
     skipSuccessfulRequests: false,
 
-    handler: (req, res) => {
+    handler: (_req: Request, res: Response) => {
         res.status(200).json({
             canProceed: false,
             unavailable: []
+        });
+    }
+});
+
+// Global rate limiter: 100 requests per 15 minutes per IP
+export const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
+        });
+    }
+});
+
+// Auth rate limiter: 10 requests per 15 minutes per IP
+export const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
+        });
+    }
+});
+
+// Swap rate limiter: 20 requests per minute per IP
+export const swapLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
+        });
+    }
+});
+
+// Withdraw rate limiter: 5 requests per 15 minutes per IP
+export const withdrawLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
         });
     }
 });

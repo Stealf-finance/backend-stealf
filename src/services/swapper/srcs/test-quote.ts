@@ -1,8 +1,9 @@
 import { order } from './services/swap/swapOrchestrator';
+import logger from '../../../config/logger';
 
-// Test: order 0.01 SOL → USDC
+// Test: order 0.01 SOL -> USDC
 const WSOL_MINT = 'So11111111111111111111111111111111111111112';
-const TAKER = 'BQ72nSv9f3PRyRKCBnHLVrerrv37CYTHm5h3s9VSGQDV'; // Adresse test de la doc Jupiter
+const TAKER = 'BQ72nSv9f3PRyRKCBnHLVrerrv37CYTHm5h3s9VSGQDV'; // Test address from Jupiter docs
 
 async function main() {
   try {
@@ -12,17 +13,19 @@ async function main() {
       taker: TAKER,
     });
 
-    console.log('Input:', res.inAmount, 'lamports SOL');
-    console.log('Output:', res.outAmount, 'USDC (raw)');
-    console.log('Output USDC:', (parseInt(res.outAmount) / 1_000_000).toFixed(2), '$');
-    console.log('Price impact:', res.priceImpact);
-    console.log('Fees:', res.feeBps, 'bps');
-    console.log('Gasless:', res.gasless);
-    console.log('TX present:', !!res.transaction);
-    console.log('Request ID:', res.requestId);
-    console.log('Route:', res.routePlan?.map(r => r.swapInfo.label).join(' → '));
+    logger.info({
+      inAmount: res.inAmount,
+      outAmount: res.outAmount,
+      outAmountUSDC: (parseInt(res.outAmount) / 1_000_000).toFixed(2),
+      priceImpact: res.priceImpact,
+      feeBps: res.feeBps,
+      gasless: res.gasless,
+      hasTx: !!res.transaction,
+      requestId: res.requestId,
+      route: res.routePlan?.map((r: any) => r.swapInfo.label).join(' -> '),
+    }, 'Test quote result');
   } catch (error: any) {
-    console.error('Error:', error.response?.data || error.message);
+    logger.error({ err: error, data: error.response?.data }, 'Test quote error');
   }
 }
 
