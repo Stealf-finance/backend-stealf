@@ -6,6 +6,4 @@ const router = Router();
 
 router.get('/history/:address',verifyAuth, WalletController.getHistory);
 router.get('/balance/:address', verifyAuth, WalletController.getBalance);
-router.get('/privacybalance/:idWallet', verifyAuth, WalletController.getPrivateBalance);
-
 export default router;

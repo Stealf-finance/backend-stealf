@@ -4,8 +4,6 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getSocketService } from '../socket/socketService';
 import { SolPriceService } from '../pricing/solPrice';
 import { TokenMetadataService } from '../token/TokenMetadataService';
-
-import { handleVaultDeposit } from '../privacycash/PrivacyDeposit';
 import { WalletBalance } from '../helius/walletInit';
 import baseLogger from '../../config/logger';
 

@@ -3,7 +3,6 @@ import { User } from '../models/User';
 import { solanaService } from '../services/helius/walletInit';
 import { parseTransactions } from '../services/wallet/transactionParser';
 
-import { privacyBalanceService } from '../services/privacycash/PrivacyBalanceService';
 
 export class WalletController {
     /**
@@ -76,34 +75,6 @@ export class WalletController {
                 },
             });
         } catch (error) {
-            next(error);
-        }
-    }
-
-    /**
-     * GET /api/wallet/privacybalance/:idWallet
-     */
-    static async getPrivateBalance(req: Request, res: Response, next: NextFunction) {
-        try {
-            const idWallet = req.params.idWallet as string;
-
-            const { authorized, user } = await WalletController.verifyWalletOwnership(req, idWallet);
-            if (!authorized || !user) {
-                return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
-            }
-
-            const privateBalances = await privacyBalanceService.getAllBalances(user._id.toString());
-
-            return res.json({
-                success: true,
-                data: {
-                    privateBalance: {
-                        sol: privateBalances.sol,
-                        usdc: privateBalances.usdc,
-                    },
-                },
-            });
-        } catch (error){
             next(error);
         }
     }

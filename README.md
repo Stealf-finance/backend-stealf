@@ -34,7 +34,6 @@ src/
 | **cache/** | Redis wrapper for balances, prices, transaction history |
 | **helius/** | Helius webhook management + wallet transaction fetching |
 | **pricing/** | SOL/USD price from CoinGecko with cache |
-| **privacycash/** | Private deposits & withdrawals via zero-knowledge proofs |
 | **socket/** | Socket.IO real-time updates (balances, transactions, transfers) |
 | **wallet/** | Transaction parsing, token mapping, USD pricing |
 
@@ -44,9 +43,6 @@ src/
 |----------|-------------|
 | `POST /api/auth/*` | Registration, session validation, email checks |
 | `GET /api/wallet/walletInfos/:address` | Wallet balance + transaction history |
-| `POST /api/private-transfer/initiate` | Initiate private deposit |
-| `POST /api/private-transfer/withdraw` | Initiate private withdrawal |
-| `GET /api/private-transfer/balance` | Get private balance |
 | `POST /api/helius/helius` | Helius webhook receiver |
 | `GET /api/users/sol-price` | Current SOL/USD price |
 | `GET /api/users/check-verification` | Magic link validation |
@@ -56,7 +52,6 @@ src/
 | Model | Purpose |
 |-------|---------|
 | **User** | Account info, Solana wallets (cash + stealf), Turnkey subOrg |
-| **PrivateBalance** | Private vault balance (SOL + USDC) per user |
 | **MagicLink** | One-time auth tokens for passwordless login |
 | **WebhookHelius** | Helius webhook registration metadata |
 
