@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 const JUPITER_ULTRA_API = 'https://api.jup.ag/ultra/v1';
-const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 interface OrderParams {
     inputMint: string;
+    outputMint: string;
     amount: string;
     taker: string;
     receiver?: string;
@@ -49,7 +49,7 @@ export class JupiterSwapService {
     async getOrder(params: OrderParams): Promise<OrderResponse> {
         const queryParams: Record<string, string> = {
             inputMint: params.inputMint,
-            outputMint: USDC_MINT,
+            outputMint: params.outputMint,
             amount: params.amount,
             taker: params.taker,
         };

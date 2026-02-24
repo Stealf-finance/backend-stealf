@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { isAxiosError } from 'axios';
 import { jupiterSwapService } from '../services/swapper/jupiterSwapService';
-import { swapOrderSchema, swapExecuteSchema } from '../utils/validations';
+import { swapOrderSchema, swapExecuteSchema, swapExecuteCashSchema } from '../utils/validations';
+import { signOnlyCashWalletTransaction } from '../services/auth/turnkeySign.service';
+import { User } from '../models/User';
 import { ZodError } from 'zod';
 
 function handleSwapError(error: unknown, res: Response, next: NextFunction) {
@@ -54,6 +56,37 @@ export class SwapController {
                 success: true,
                 data: executeResponse,
             });
+        } catch (error) {
+            handleSwapError(error, res, next);
+        }
+    }
+
+    /**
+     * POST /api/swap/execute-cash
+     * Signs the Jupiter unsigned TX via Turnkey (cash wallet) and executes via Jupiter.
+     * No client-side signing needed — backend handles everything.
+     */
+    static async executeCash(req: Request, res: Response, next: NextFunction) {
+        try {
+            const validated = swapExecuteCashSchema.parse(req.body);
+
+            const user = await User.findById((req as any).user?.id);
+            if (!user?.turnkey_subOrgId) {
+                return res.status(400).json({ error: 'No Turnkey sub-organization found' });
+            }
+
+            const signedTransaction = await signOnlyCashWalletTransaction(
+                user.turnkey_subOrgId,
+                validated.unsignedTransaction,
+                user.cash_wallet,
+            );
+
+            const executeResponse = await jupiterSwapService.executeSwap({
+                requestId: validated.requestId,
+                signedTransaction,
+            });
+
+            return res.status(200).json({ success: true, data: executeResponse });
         } catch (error) {
             handleSwapError(error, res, next);
         }

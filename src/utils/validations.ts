@@ -117,6 +117,8 @@ const heliusInstructionSchema = z.object({
 export const swapOrderSchema = z.object({
     inputMint: z.string()
         .regex(solanaAddressRegex, 'Invalid inputMint Solana address format'),
+    outputMint: z.string()
+        .regex(solanaAddressRegex, 'Invalid outputMint Solana address format'),
     amount: z.string()
         .regex(/^\d+$/, 'Amount must be a numeric string (lamports/native units)'),
     taker: z.string()
@@ -124,6 +126,11 @@ export const swapOrderSchema = z.object({
     receiver: z.string()
         .regex(solanaAddressRegex, 'Invalid receiver Solana address format')
         .optional(),
+});
+
+export const swapExecuteCashSchema = z.object({
+    requestId: z.string().min(1, 'requestId is required'),
+    unsignedTransaction: z.string().min(1, 'unsignedTransaction is required'),
 });
 
 export const swapExecuteSchema = z.object({

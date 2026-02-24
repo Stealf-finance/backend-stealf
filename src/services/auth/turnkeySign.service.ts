@@ -81,3 +81,48 @@ export async function signAndSendCashWalletTransaction(
   console.log(`[TurnkeySign] Transaction confirmed (processed): ${txSignature}`);
   return txSignature;
 }
+
+/**
+ * Signs a transaction via Turnkey WITHOUT sending it to Solana.
+ * Used for Jupiter swaps where the signed TX must be forwarded to Jupiter execute endpoint.
+ *
+ * @returns signed transaction as base64 string (Jupiter execute format)
+ */
+export async function signOnlyCashWalletTransaction(
+  subOrgId: string,
+  unsignedTransactionBase64: string,
+  cashWalletAddress?: string
+): Promise<string> {
+  const turnkey = getTurnkeyClient();
+  const client = turnkey.apiClient();
+
+  let signWith = cashWalletAddress;
+
+  if (!signWith) {
+    const walletsResponse = await client.getWallets({ organizationId: subOrgId });
+    const wallet = walletsResponse.wallets?.[0];
+    if (!wallet) throw new Error('No wallet found in sub-organization');
+    const accountsResponse = await client.getWalletAccounts({
+      organizationId: subOrgId,
+      walletId: wallet.walletId,
+    });
+    const account = accountsResponse.accounts?.[0];
+    if (!account) throw new Error('No wallet account found');
+    signWith = account.address;
+  }
+
+  console.log(`[TurnkeySign] Sign-only with address: ${signWith}`);
+
+  // Turnkey expects hex — convert base64 → hex
+  const unsignedHex = Buffer.from(unsignedTransactionBase64, 'base64').toString('hex');
+
+  const signResult = await client.signTransaction({
+    organizationId: subOrgId,
+    signWith,
+    unsignedTransaction: unsignedHex,
+    type: 'TRANSACTION_TYPE_SOLANA',
+  });
+
+  // Jupiter execute expects base64 — convert hex → base64
+  return Buffer.from(signResult.signedTransaction, 'hex').toString('base64');
+}
