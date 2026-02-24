@@ -163,6 +163,34 @@ export async function getDashboard(userId: string): Promise<{
 }
 
 /**
+ * Retourne la somme en lamports de tous les VaultShares avec status="active".
+ *
+ * Utilise VaultShare.find() pour bénéficier des hooks Mongoose post("find")
+ * qui décryptent automatiquement depositAmountLamports (AES-256-GCM).
+ * Remplace VaultShare.aggregate([{ $sum: "$depositAmountLamports" }]) qui opère
+ * sur des chaînes hexadécimales chiffrées et retourne toujours 0.
+ *
+ * Retourne 0n si aucun share actif ou en cas d'erreur — ne propage jamais d'exception.
+ */
+export async function getTotalActiveDepositLamports(): Promise<bigint> {
+  try {
+    const activeShares = await VaultShare.find({ status: "active" });
+    if (activeShares.length === 0) return 0n;
+
+    let total = 0n;
+    for (const share of activeShares) {
+      const amount = share.depositAmountLamports;
+      if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) {
+        total += BigInt(Math.round(amount));
+      }
+    }
+    return total;
+  } catch {
+    return 0n;
+  }
+}
+
+/**
  * Compare off-chain share totals with on-chain vault token balances.
  * Logs a warning if discrepancy exceeds 0.1%.
  */

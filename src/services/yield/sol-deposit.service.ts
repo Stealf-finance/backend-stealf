@@ -24,6 +24,7 @@ import {
 } from "./yield.config";
 import { executeJitoStaking, executeMarinadeStaking } from "./sol-staking.service";
 import { getExchangeRate } from "./yield-rates.service";
+import { getArciumVaultService, isArciumEnabled } from "./arcium-vault.service";
 
 export async function buildDepositTransaction(
   userPublicKey: string,
@@ -153,6 +154,30 @@ export async function confirmDeposit(
     status: "completed",
     amount: depositAmount / LAMPORTS_PER_SOL,
   });
+
+  // Arcium: fire-and-forget encrypted bookkeeping for standard deposits
+  if (isArciumEnabled()) {
+    const lamports = BigInt(depositAmount);
+    const arciumService = getArciumVaultService();
+    (async () => {
+      try {
+        await arciumService.ensureUserShare(userId);
+      } catch (err: any) {
+        console.error("[Arcium] ensureUserShare failed (standard deposit):", err.message);
+        return;
+      }
+      try {
+        await arciumService.recordDeposit(userId, lamports);
+        await VaultShare.findByIdAndUpdate(share._id, { encryptedOnChain: true });
+      } catch (err: any) {
+        console.error("[Arcium] recordDeposit failed (standard deposit):", err.message);
+        return;
+      }
+      arciumService.updateEncryptedTotal(lamports, true).catch((err: any) => {
+        console.error("[Arcium] updateEncryptedTotal failed (standard deposit):", err.message);
+      });
+    })();
+  }
 
   return {
     success: true,

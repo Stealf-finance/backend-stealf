@@ -6,6 +6,8 @@ import { getPrivacyYieldService } from "../services/yield/privacy-yield.service"
 import { getAutoSweepService } from "../services/yield/auto-sweep.service";
 import { getArciumVaultService, isArciumEnabled } from "../services/yield/arcium-vault.service";
 import { getYieldMpcEnhancementsService } from "../services/yield/yield-mpc-enhancements.service";
+import { VaultShare } from "../models/VaultShare";
+import { getTotalActiveDepositLamports } from "../services/yield/yield-rates.service";
 import { confirmPrivateDepositArcium } from "../services/yield/private-sol.service";
 import { getBatchStakingService } from "../services/yield/batch-staking.service";
 
@@ -177,17 +179,51 @@ export class YieldController {
           }
 
           const yieldService = getYieldService();
-          const result = await yieldService.executePrivateWithdraw(
-            userId,
-            amount,
-            vaultType,
-            userPublicKey
-          );
+          let result;
+          try {
+            result = await yieldService.executePrivateWithdraw(
+              userId,
+              amount,
+              vaultType,
+              userPublicKey
+            );
+          } catch (solErr: any) {
+            // SOL TX failed after verifyWithdrawal already decremented encrypted_balance.
+            // Compensate by fire-and-forget recordDeposit to restore the on-chain state.
+            if (arciumService) {
+              arciumService.recordDeposit(userId, lamports).catch((compErr: any) => {
+                console.error(
+                  "[Arcium][CRITICAL] compensation recordDeposit failed after SOL TX failure:",
+                  compErr.message
+                );
+              });
+            }
+            throw solErr;
+          }
 
-          // Arcium: update encrypted global total (non-blocking)
+          // Arcium: update encrypted global total (non-blocking, only on success)
           arciumService?.updateEncryptedTotal(lamports, false).catch((err: any) => {
             console.error("[Arcium] updateEncryptedTotal (withdraw) failed:", err.message);
           });
+
+          // Snapshot: record encrypted balance state after successful private withdraw
+          if (arciumService) {
+            (async () => {
+              try {
+                const share = await VaultShare.findOne({ userId, vaultType, status: "active" });
+                const currentIndex = share?.snapshotIndex ?? 0;
+                const newIndex = BigInt(currentIndex + 1);
+                const vaultTypeNum = vaultType === "sol_jito" ? 0 : 1;
+                const enhService = getYieldMpcEnhancementsService();
+                const snapResult = await enhService.takeBalanceSnapshot(userId, vaultTypeNum, newIndex);
+                if (snapResult.success && share) {
+                  await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: currentIndex + 1 });
+                }
+              } catch (err: any) {
+                console.error("[Arcium] takeBalanceSnapshot (withdraw) failed:", err.message);
+              }
+            })();
+          }
 
           return res.status(200).json({ ...result, sufficient: true });
         }
@@ -313,6 +349,24 @@ export class YieldController {
             arciumService.updateEncryptedTotal(totalLamports, true).catch((err: any) => {
               console.error("[Arcium] updateEncryptedTotal (deposit) failed:", err.message);
             });
+
+            // Snapshot: record encrypted balance state after all deposits
+            try {
+              const share = await VaultShare.findById(shareIds[0]);
+              const currentIndex = share?.snapshotIndex ?? 0;
+              const newIndex = BigInt(currentIndex + 1);
+              const vaultTypeNum = vaultType === "sol_jito" ? 0 : 1;
+              const enhService = getYieldMpcEnhancementsService();
+              const snapResult = await enhService.takeBalanceSnapshot(userId, vaultTypeNum, newIndex);
+              if (snapResult.success) {
+                await VaultShare.updateMany(
+                  { _id: { $in: shareIds } },
+                  { snapshotIndex: currentIndex + 1 }
+                );
+              }
+            } catch (err: any) {
+              console.error("[Arcium] takeBalanceSnapshot (deposit) failed:", err.message);
+            }
           })();
         }
 
@@ -384,6 +438,13 @@ export class YieldController {
             vaultType,
             amount
           );
+          // Arcium: update encrypted global total (non-blocking, standard SOL withdraw)
+          if (isArciumEnabled() && vaultType.startsWith("sol_")) {
+            const lamports = BigInt(Math.round(amount * 1e9));
+            getArciumVaultService().updateEncryptedTotal(lamports, false).catch((err: any) => {
+              console.error("[Arcium] updateEncryptedTotal (std withdraw) failed:", err.message);
+            });
+          }
         }
       }
 
@@ -611,13 +672,7 @@ export class YieldController {
         }
         thresholdLamports = BigInt(Math.round(parsed));
       } else {
-        const { VaultShare } = await import("../models/VaultShare");
-        const agg = await VaultShare.aggregate([
-          { $match: { status: "active" } },
-          { $group: { _id: null, total: { $sum: "$depositAmountLamports" } } },
-        ]);
-        const totalLamports = agg.length > 0 ? agg[0].total : 0;
-        thresholdLamports = BigInt(Math.round(totalLamports));
+        thresholdLamports = await getTotalActiveDepositLamports();
       }
 
       const enhancementsService = getYieldMpcEnhancementsService();
@@ -640,6 +695,150 @@ export class YieldController {
       return res.status(500).json({
         error: "Proof of reserve service temporarily unavailable",
       });
+    }
+  }
+
+  // ========== PROOF FROM SNAPSHOTS ==========
+
+  static async proofFromSnapshots(req: Request, res: Response) {
+    try {
+      const userId = req.user?.mongoUserId;
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      if (!isArciumEnabled()) {
+        return res.status(503).json({
+          error: "Arcium MPC is not enabled. Set ARCIUM_ENABLED=true.",
+        });
+      }
+
+      const schema = z.object({
+        startIndex: z.coerce.number().int().min(0),
+        endIndex: z.coerce.number().int().min(1),
+        thresholdBps: z.coerce.number().int().min(0).max(10000).default(100),
+        vaultType: z.enum(["sol_jito", "sol_marinade"]).default("sol_jito"),
+      }).refine((d) => d.endIndex > d.startIndex, {
+        message: "endIndex must be greater than startIndex",
+      });
+
+      const parsed = schema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Invalid parameters",
+          details: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const { startIndex, endIndex, thresholdBps } = parsed.data;
+      const enhService = getYieldMpcEnhancementsService();
+      const result = await enhService.proofOfYieldFromSnapshots(
+        userId,
+        BigInt(startIndex),
+        BigInt(endIndex),
+        thresholdBps
+      );
+
+      if (!result.success) {
+        // Snapshot PDAs not found on-chain or MPC unavailable
+        return res.status(200).json({ exceedsThreshold: null, available: false });
+      }
+
+      return res.status(200).json({
+        exceedsThreshold: result.data?.exceedsThreshold ?? null,
+        available: true,
+        thresholdBps,
+      });
+    } catch (error: any) {
+      console.error("YieldController.proofFromSnapshots error:", error);
+      return res.status(500).json({ error: "Proof from snapshots temporarily unavailable" });
+    }
+  }
+
+  // ========== BALANCE SNAPSHOTS ==========
+
+  static async getSnapshots(req: Request, res: Response) {
+    try {
+      const userId = req.user?.mongoUserId;
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      const vaultType = req.query.vaultType as string | undefined;
+      const query: Record<string, any> = { userId, snapshotIndex: { $gt: 0 } };
+      if (vaultType) query.vaultType = vaultType;
+
+      const shares = await VaultShare.find(query)
+        .select("_id vaultType snapshotIndex createdAt")
+        .sort({ snapshotIndex: 1 })
+        .lean();
+
+      const snapshots = shares.map((s: any) => ({
+        shareId: s._id.toString(),
+        vaultType: s.vaultType,
+        snapshotIndex: s.snapshotIndex,
+        createdAt: s.createdAt,
+      }));
+
+      return res.status(200).json({ snapshots });
+    } catch (error: any) {
+      console.error("YieldController.getSnapshots error:", error);
+      return res.status(500).json({ error: "Failed to fetch snapshots" });
+    }
+  }
+
+  // ========== YIELD DISTRIBUTION (admin trigger) ==========
+
+  static async distributeYield(req: Request, res: Response) {
+    try {
+      if (!isArciumEnabled()) {
+        return res.status(503).json({
+          error: "Arcium MPC is not enabled. Set ARCIUM_ENABLED=true.",
+        });
+      }
+
+      const enhService = getYieldMpcEnhancementsService();
+      const { getExchangeRate } = await import("../services/yield/yield-rates.service");
+
+      // Load all distinct users with active SOL shares
+      const activeShares = await VaultShare.find({
+        status: "active",
+        vaultType: { $in: ["sol_jito", "sol_marinade"] },
+      })
+        .select("userId vaultType")
+        .lean();
+
+      const seen = new Set<string>();
+      const jobs: Array<{ userId: string; vaultType: string }> = [];
+      for (const s of activeShares as any[]) {
+        const key = `${s.userId}:${s.vaultType}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          jobs.push({ userId: s.userId, vaultType: s.vaultType });
+        }
+      }
+
+      let processed = 0;
+      let failed = 0;
+
+      for (const { userId: uid, vaultType: vt } of jobs) {
+        try {
+          const rate = await getExchangeRate(vt as any);
+          // Express daily yield as integer ratio (e.g. 1.0001 daily ≈ rateNum=10001, rateDenom=10000)
+          const rateNum = BigInt(Math.round(rate * 10000));
+          const rateDenom = 10000n;
+          await enhService.computeYieldDistribution(uid, vt === "sol_jito" ? 0 : 1, rateNum, rateDenom);
+          processed++;
+        } catch (err: any) {
+          console.error(`[Arcium] distributeYield failed for ${uid}:${vt}:`, err.message);
+          failed++;
+        }
+      }
+
+      return res.status(200).json({ processed, failed });
+    } catch (error: any) {
+      console.error("YieldController.distributeYield error:", error);
+      return res.status(500).json({ error: "Yield distribution failed" });
     }
   }
 }

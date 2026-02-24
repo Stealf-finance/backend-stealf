@@ -27,6 +27,15 @@ router.get("/dashboard", YieldController.getDashboard);
 // Arcium proof of yield (MPC-verified)
 router.get("/proof", YieldController.proofOfYield);
 
+// Arcium balance snapshots
+router.get("/snapshots", YieldController.getSnapshots);
+
+// Arcium proof of yield from snapshots
+router.get("/proof-from-snapshots", YieldController.proofFromSnapshots);
+
+// Arcium yield distribution (admin trigger)
+router.post("/distribute-yield", YieldController.distributeYield);
+
 // Auto-sweep (Yield-to-Card)
 router.get("/auto-sweep", YieldController.getAutoSweepConfig);
 router.put("/auto-sweep", YieldController.updateAutoSweepConfig);

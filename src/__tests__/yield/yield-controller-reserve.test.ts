@@ -2,15 +2,17 @@
  * Tests pour YieldController.proofOfReserve
  *
  * Requirements couverts:
- * - 2.5: Endpoint GET /reserve-proof sans auth (permissionless)
- * - 2.6: Retourne { isSolvent, threshold, timestamp }
+ * - 3.1: Calcul du seuil via getTotalActiveDepositLamports() (Mongoose hooks, pas $sum)
+ * - 3.2: Conserver la priorité du threshold custom via req.query.threshold
+ * - 3.3: Réponse { isSolvent, threshold, timestamp } sans montants individuels
+ * - 3.4: HTTP 503 si MPC indisponible
  */
 
 // ========== MOCKS ==========
 
 let mockIsArciumEnabled = true;
 const mockProofOfReserveFn = jest.fn();
-const mockVaultShareAggregate = jest.fn();
+const mockGetTotalActiveDepositLamports = jest.fn();
 
 jest.mock("../../services/yield/arcium-vault.service", () => ({
   isArciumEnabled: () => mockIsArciumEnabled,
@@ -29,10 +31,15 @@ jest.mock("../../services/yield/yield-mpc-enhancements.service", () => ({
   }),
 }));
 
-// Mock dynamique de VaultShare (import() dans le controller)
+jest.mock("../../services/yield/yield-rates.service", () => ({
+  getTotalActiveDepositLamports: (...args: any[]) =>
+    mockGetTotalActiveDepositLamports(...args),
+}));
+
 jest.mock("../../models/VaultShare", () => ({
   VaultShare: {
-    aggregate: mockVaultShareAggregate,
+    find: jest.fn(),
+    aggregate: jest.fn(),
   },
 }));
 
@@ -79,6 +86,17 @@ jest.mock("../../services/yield/auto-sweep.service", () => ({
   getAutoSweepService: () => ({
     getConfig: jest.fn().mockResolvedValue({ enabled: false }),
     configure: jest.fn(),
+  }),
+}));
+
+jest.mock("../../services/yield/private-sol.service", () => ({
+  confirmPrivateDepositArcium: jest.fn(),
+}));
+
+jest.mock("../../services/yield/batch-staking.service", () => ({
+  getBatchStakingService: () => ({
+    addToQueue: jest.fn(),
+    getStatus: jest.fn(),
   }),
 }));
 
@@ -143,6 +161,7 @@ describe("YieldController.proofOfReserve", () => {
     await YieldController.proofOfReserve(req, res);
 
     expect(mockProofOfReserveFn).toHaveBeenCalledWith(5_000_000_000n);
+    expect(mockGetTotalActiveDepositLamports).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     const body = (res.json as jest.Mock).mock.calls[0][0];
     expect(body.isSolvent).toBe(true);
@@ -150,8 +169,8 @@ describe("YieldController.proofOfReserve", () => {
     expect(body.timestamp).toBeDefined();
   });
 
-  it("agrège depuis VaultShare si threshold absent", async () => {
-    mockVaultShareAggregate.mockResolvedValue([{ _id: null, total: 3_000_000_000 }]);
+  it("appelle getTotalActiveDepositLamports() si threshold absent", async () => {
+    mockGetTotalActiveDepositLamports.mockResolvedValue(3_000_000_000n);
     mockProofOfReserveFn.mockResolvedValue({
       success: true,
       data: { isSolvent: true },
@@ -163,12 +182,13 @@ describe("YieldController.proofOfReserve", () => {
 
     await YieldController.proofOfReserve(req, res);
 
+    expect(mockGetTotalActiveDepositLamports).toHaveBeenCalled();
     expect(mockProofOfReserveFn).toHaveBeenCalledWith(3_000_000_000n);
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
-  it("utilise threshold=0 si VaultShare est vide", async () => {
-    mockVaultShareAggregate.mockResolvedValue([]); // aucun dépôt actif
+  it("utilise threshold=0n si aucun dépôt actif (getTotalActiveDepositLamports retourne 0n)", async () => {
+    mockGetTotalActiveDepositLamports.mockResolvedValue(0n);
     mockProofOfReserveFn.mockResolvedValue({
       success: true,
       data: { isSolvent: true },
