@@ -1,0 +1,27 @@
+node_modules
+dist
+.git
+.github
+.claude
+.kiro
+.vscode
+.idea
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Docs
+*.md
+docs/
+HELIUS.md
+LICENSE
+
+# Dev files
+nodemon.json
+.eslintrc*
+.prettierrc*
+coverage/
+*.log

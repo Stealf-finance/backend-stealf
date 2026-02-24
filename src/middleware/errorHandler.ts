@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Sentry, sentryEnabled } from '../config/sentry';
 import logger from '../config/logger';
 
 // SECURITY: Default to production mode if NODE_ENV not explicitly set to 'development'
@@ -12,6 +13,11 @@ export const errorHandler = (
 ) => {
     // Log full error for debugging (server-side only)
     logger.error({ err: error, path: req.path, method: req.method }, 'Unhandled error');
+
+    // Report to Sentry
+    if (sentryEnabled) {
+        Sentry.captureException(error);
+    }
 
     if (error.name === 'MongoError' || error.name === 'MongoServerError') {
         const mongoError = error as any;

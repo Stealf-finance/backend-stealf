@@ -8,6 +8,9 @@ import cors from 'cors';
 
 dotenv.config();
 
+// Sentry must init before other imports to capture all errors
+import './config/sentry';
+
 import { env } from './config/env';
 import { allowedOrigins } from './config/cors';
 import logger, { httpLogger } from './config/logger';

@@ -30,6 +30,7 @@ const envSchema = z.object({
   JUPITER_API_KEY: z.string().optional(),
   JWT_SECRET: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  SENTRY_DSN: z.string().url().optional(),
 });
 
 /**
