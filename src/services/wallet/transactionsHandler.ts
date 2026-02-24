@@ -68,12 +68,6 @@ export class TransactionHandler {
                     const { fromUserAccount, toUserAccount, amount } = transfer;
                     const solAmount = (amount || 0) / LAMPORTS_PER_SOL;
 
-                    // Vault deposit detection
-                    if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                        txLogger.debug('Vault SOL deposit detected');
-                        await handleVaultDeposit(transaction, transfer);
-                    }
-
                     if (fromUserAccount) {
                         this.addDelta(deltas, fromUserAccount, null, -solAmount);
                         affectedWallets.add(fromUserAccount);
@@ -87,12 +81,6 @@ export class TransactionHandler {
                 // Accumulate SPL token deltas
                 for (const transfer of tokenTransfers) {
                     const { fromUserAccount, toUserAccount, tokenAmount, mint } = transfer;
-
-                    // Vault deposit detection
-                    if (toUserAccount === VAULT_ADDRESS && fromUserAccount) {
-                        txLogger.debug('Vault token deposit detected');
-                        await handleVaultDeposit(transaction, transfer, mint ?? undefined);
-                    }
 
                     if (fromUserAccount) {
                         this.addDelta(deltas, fromUserAccount, mint || null, -(tokenAmount || 0));
