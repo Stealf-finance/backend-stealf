@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { CacheService } from '../cache/cacheService';
+import redisClient from '../../config/redis';
 import logger from '../../config/logger';
 
 interface PreAuthPayload {
@@ -17,7 +18,7 @@ interface PreAuthStatus {
 }
 
 export class PreAuthService {
-    private static readonly JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+    private static readonly JWT_SECRET = process.env.JWT_SECRET!;
     private static readonly TOKEN_EXPIRY = 10 * 60; // 10 minutes in secondes
     private static readonly REDIS_KEY_PREFIX = 'preauth:';
 
@@ -72,13 +73,23 @@ export class PreAuthService {
             return;
         }
 
+        // Atomic update via Redis WATCH/MULTI to prevent TOCTOU race conditions
         const redisKey = `${this.REDIS_KEY_PREFIX}${sessionId}`;
-        const status = await CacheService.get<PreAuthStatus>(redisKey);
-
-        if (status) {
-            status.verified = true;
-            await CacheService.set(redisKey, status, this.TOKEN_EXPIRY);
+        await redisClient.watch(redisKey);
+        const raw = await redisClient.get(redisKey);
+        if (!raw) {
+            await redisClient.unwatch();
+            return;
+        }
+        const status: PreAuthStatus = JSON.parse(raw);
+        status.verified = true;
+        const multi = redisClient.multi();
+        multi.set(redisKey, JSON.stringify(status), 'EX', this.TOKEN_EXPIRY);
+        const txResult = await multi.exec();
+        if (txResult) {
             logger.debug('Pre-auth session marked as verified');
+        } else {
+            logger.warn('Pre-auth verification concurrent update detected');
         }
     }
 

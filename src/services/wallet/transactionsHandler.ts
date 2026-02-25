@@ -24,23 +24,15 @@ interface WalletDeltas {
     };
 }
 
+const MAX_DEDUP_SIZE = 10_000;
+
 export class TransactionHandler {
     private static processedTransactions = new Set<string>();
-
-    private static getVaultAddress(): string {
-        const address = process.env.VAULT_PUBLIC_KEY;
-        if (!address) {
-            txLogger.error('VAULT_PUBLIC_KEY not configured');
-        }
-        return address || '';
-    }
 
     static async handleTransaction(payload: any) {
         try {
             const transactions = Array.isArray(payload) ? payload : [payload];
             txLogger.debug({ count: transactions.length }, 'Received transactions');
-
-            const VAULT_ADDRESS = this.getVaultAddress();
 
             for (const transaction of transactions) {
                 const signature = transaction?.signature;
@@ -57,6 +49,14 @@ export class TransactionHandler {
                     continue;
                 }
                 this.processedTransactions.add(signature);
+
+                // Evict oldest entries when set gets too large to prevent memory leak
+                if (this.processedTransactions.size > MAX_DEDUP_SIZE) {
+                    const it = this.processedTransactions.values();
+                    for (let i = 0; i < MAX_DEDUP_SIZE / 2; i++) {
+                        this.processedTransactions.delete(it.next().value!);
+                    }
+                }
 
                 txLogger.debug({ signature: signature.slice(0, 12), nativeTransfers: nativeTransfers.length, tokenTransfers: tokenTransfers.length }, 'Processing transaction');
 
@@ -180,7 +180,7 @@ export class TransactionHandler {
 
             walletBalance.totalUSD = walletBalance.tokens.reduce((sum, t) => sum + t.balanceUSD, 0);
 
-            await CacheService.set(balanceKey, walletBalance, 0);
+            await CacheService.set(balanceKey, walletBalance, 300);
             getSocketService().emitBalanceUpdate(walletAddress, walletBalance);
         } catch (error) {
             txLogger.error({ err: error, wallet: walletAddress.slice(0, 8) }, 'Failed to apply deltas');
@@ -208,7 +208,7 @@ export class TransactionHandler {
 
             const newHistory = [transaction, ...currentHistory].slice(0, 100);
 
-            await CacheService.set(historyKey, newHistory, 0);
+            await CacheService.set(historyKey, newHistory, 300);
 
             getSocketService().emitNewTransaction(walletAddress, transaction);
 

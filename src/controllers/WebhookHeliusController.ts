@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { TransactionHandler } from '../services/wallet/transactionsHandler';
 import { heliusWebhookPayloadSchema } from '../utils/validations';
@@ -17,7 +18,9 @@ export class WebhookHeliusController {
                 return res.status(500).json({ success: false, error: 'Server configuration error' });
             }
 
-            if (!authHeader || authHeader !== expectedSecret) {
+            const authBuffer = Buffer.from(authHeader || '');
+            const expectedBuffer = Buffer.from(expectedSecret);
+            if (authBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(authBuffer, expectedBuffer)) {
                 logger.warn('Unauthorized webhook request - invalid secret');
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }

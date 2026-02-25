@@ -3,18 +3,18 @@ import { isAxiosError } from 'axios';
 import { jupiterSwapService } from '../services/swapper/jupiterSwapService';
 import { swapOrderSchema, swapExecuteSchema } from '../utils/validations';
 import { ZodError } from 'zod';
+import logger from '../config/logger';
 
 function handleSwapError(error: unknown, res: Response, next: NextFunction) {
     if (error instanceof ZodError) {
         return res.status(400).json({
-            error: 'Validation failed',
-            details: error.issues,
+            error: 'Invalid swap parameters',
         });
     }
     if (isAxiosError(error) && error.response) {
-        return res.status(error.response.status).json({
-            error: 'Jupiter API error',
-            details: error.response.data,
+        logger.error({ status: error.response.status, data: error.response.data }, 'Jupiter API error');
+        return res.status(502).json({
+            error: 'Swap service temporarily unavailable',
         });
     }
     next(error);

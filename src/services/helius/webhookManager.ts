@@ -80,9 +80,13 @@ class HeliusWebhookManager {
             }
 
             const baseUrl = 'https://api.helius.xyz';
-            const getUrl = `${baseUrl}/v0/webhooks/${config.webhookId}?api-key=${process.env.HELIUS_API_KEY}`;
+            const getUrl = `${baseUrl}/v0/webhooks/${config.webhookId}`;
+            const apiHeaders = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.HELIUS_API_KEY}`,
+            };
 
-            const getResponse = await fetch(getUrl);
+            const getResponse = await fetch(getUrl, { headers: apiHeaders });
             if (!getResponse.ok) {
                 throw new Error(`Failed to fetch webhook: ${await getResponse.text()}`);
             }
@@ -92,7 +96,7 @@ class HeliusWebhookManager {
 
             const allAddresses = [...new Set([...existingAddresses, ...walletsToAdd])];
 
-            const putUrl = `${baseUrl}/v0/webhooks/${config.webhookId}?api-key=${process.env.HELIUS_API_KEY}`;
+            const putUrl = `${baseUrl}/v0/webhooks/${config.webhookId}`;
 
             const updatePayload: any = {
                 webhookURL: webhookData.webhookURL,
@@ -107,9 +111,7 @@ class HeliusWebhookManager {
 
             const putResponse = await fetch(putUrl, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: apiHeaders,
                 body: JSON.stringify(updatePayload),
             });
 

@@ -2,7 +2,11 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { socketAuthMiddleware } from '../../middleware/socketAuth';
 import { allowedOrigins } from '../../config/cors';
+import { User } from '../../models/User';
 import logger from '../../config/logger';
+
+// Solana base58 address: 32-44 alphanumeric chars (no 0, O, I, l)
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 class SocketService {
     private io: SocketIOServer | null = null;
@@ -18,18 +22,43 @@ class SocketService {
 
         this.io.use(socketAuthMiddleware);
 
-        this.io.on('connection', (socket) => {
+        this.io.on('connection', async (socket) => {
             const subscribedWallets = new Set<string>();
             const subscribedUsers = new Set<string>();
 
-            socket.on('subscribe:wallet', (walletAddress: string) => {
+            // Pre-load user's wallets for ownership validation
+            let userWallets: Set<string> = new Set();
+            let userMongoId: string | null = null;
+            try {
+                if (socket.user?.organizationId) {
+                    const user = await User.findOne({ turnkey_subOrgId: socket.user.organizationId });
+                    if (user) {
+                        userMongoId = user._id.toString();
+                        if (user.cash_wallet) userWallets.add(user.cash_wallet);
+                        if (user.stealf_wallet) userWallets.add(user.stealf_wallet);
+                    }
+                }
+            } catch (err) {
+                logger.error({ err }, 'Failed to load user wallets for socket');
+            }
+
+            socket.on('subscribe:wallet', (walletAddress: unknown) => {
+                if (typeof walletAddress !== 'string' || !SOLANA_ADDRESS_RE.test(walletAddress)) {
+                    return;
+                }
+                if (!userWallets.has(walletAddress)) {
+                    return;
+                }
                 if (!subscribedWallets.has(walletAddress)) {
                     socket.join(walletAddress);
                     subscribedWallets.add(walletAddress);
                 }
             });
 
-            socket.on('subscribe:user', (userId: string) => {
+            socket.on('subscribe:user', (userId: unknown) => {
+                if (typeof userId !== 'string' || !userMongoId || userId !== userMongoId) {
+                    return;
+                }
                 if (!subscribedUsers.has(userId)) {
                     socket.join(`user:${userId}`);
                     subscribedUsers.add(userId);

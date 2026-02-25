@@ -36,6 +36,12 @@ export async function socketAuthMiddleware(socket: Socket, next: (err?: Error) =
             return next(new Error('Authentification error: JWT expired'));
         }
 
+        // Verify user still exists in database (prevents deleted users from connecting)
+        const user = await User.findOne({ turnkey_subOrgId: decoded.organizationId });
+        if (!user) {
+            return next(new Error('Authentication error: User not found'));
+        }
+
         socket.user = decoded;
 
         next();

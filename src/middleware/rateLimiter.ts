@@ -55,6 +55,19 @@ export const swapLimiter = rateLimit({
     }
 });
 
+// Wallet rate limiter: 30 requests per minute per IP
+export const walletLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
+        });
+    }
+});
+
 // Withdraw rate limiter: 5 requests per 15 minutes per IP
 export const withdrawLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

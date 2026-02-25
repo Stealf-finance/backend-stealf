@@ -18,10 +18,6 @@ export class MagicLinkController{
                 token = authHeader.substring(7);
             }
 
-            if (!token && req.query.token && typeof req.query.token === 'string') {
-                token = req.query.token;
-            }
-
             if (!token) {
                 return res.status(400).json({
                     success: false,
@@ -142,7 +138,7 @@ export class MagicLinkController{
         } catch (error: any){
             logger.error({ err: error }, 'Error verifying magic link');
 
-            const errorDeepLink = `stealf://auth/error?message=${encodeURIComponent(error.message || 'Invalid or expired token')}`;
+            const errorDeepLink = `stealf://auth/error?message=${encodeURIComponent('Invalid or expired token')}`;
 
             return res.status(200).send(`
                     <!DOCTYPE html>

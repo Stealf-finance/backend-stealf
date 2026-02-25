@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { solanaService } from '../services/helius/walletInit';
 import { parseTransactions } from '../services/wallet/transactionParser';
 
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export class WalletController {
     /**
@@ -29,6 +30,9 @@ export class WalletController {
     static async getHistory(req: Request, res: Response, next: NextFunction) {
         try {
             const address = req.params.address as string;
+            if (!SOLANA_ADDRESS_RE.test(address)) {
+                return res.status(400).json({ error: 'Invalid wallet address' });
+            }
             const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
             const { authorized } = await WalletController.verifyWalletOwnership(req, address);
@@ -58,6 +62,9 @@ export class WalletController {
     static async getBalance(req: Request, res: Response, next: NextFunction) {
         try {
             const address = req.params.address as string;
+            if (!SOLANA_ADDRESS_RE.test(address)) {
+                return res.status(400).json({ error: 'Invalid wallet address' });
+            }
 
             const { authorized } = await WalletController.verifyWalletOwnership(req, address);
             if (!authorized) {

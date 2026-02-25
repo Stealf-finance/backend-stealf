@@ -104,7 +104,7 @@ export const solanaService = {
             const totalUSD = tokens.reduce((sum, t) => sum + t.balanceUSD, 0);
             const result: WalletBalance = { tokens, totalUSD };
 
-            await CacheService.set(cacheKey, result, 0);
+            await CacheService.set(cacheKey, result, 300);
 
             return result;
         } catch (error) {
@@ -131,7 +131,7 @@ export const solanaService = {
             }
 
             logger.debug({ address }, 'WalletInit: fetching transactions from Helius API');
-            const baseUrl = `https://api-mainnet.helius-rpc.com/v0/addresses/${address}/transactions/?api-key=${heliusApiKey}`;
+            const baseUrl = `https://api-mainnet.helius-rpc.com/v0/addresses/${address}/transactions/`;
 
             let url = baseUrl;
             let lastSignature: string | null = null;
@@ -139,10 +139,12 @@ export const solanaService = {
 
             while (allTransactions.length < 100) {
                 if (lastSignature) {
-                    url = baseUrl + `&before=${lastSignature}`;
+                    url = baseUrl + `?before=${lastSignature}`;
                 }
 
-                const response = await fetch(url);
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${heliusApiKey}` },
+                });
 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -170,7 +172,7 @@ export const solanaService = {
                 allTransactions.map((tx) => parseHeliusTransaction(tx, address))
             );
 
-            await CacheService.set(cacheKey, rawTransactions, 0);
+            await CacheService.set(cacheKey, rawTransactions, 300);
             return rawTransactions.slice(0, limit);
 
         } catch (error) {

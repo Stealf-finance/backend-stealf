@@ -10,8 +10,8 @@ const router = Router();
 
 router.post('/auth', authLimiter, UserController.authUser);
 router.post('/check-availability', availabilityCheckLimiter, UserController.checkAvailability);
-router.get('/check-verification', MagicLinkController.checkVerification);
-router.get('/verify-magic-link', MagicLinkController.verifyMagicLink);
+router.get('/check-verification', authLimiter, MagicLinkController.checkVerification);
+router.get('/verify-magic-link', authLimiter, MagicLinkController.verifyMagicLink);
 
 router.get('/sol-price', verifyAuth, SolPriceController.getSolPrice);
 router.get('/:userId', verifyAuth, UserController.getUser);

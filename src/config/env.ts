@@ -14,21 +14,19 @@ const envSchema = z.object({
   WEBHOOK_URL: z.string().url('WEBHOOK_URL must be a valid URL'),
   HELIUS_WEBHOOK_SECRET: z.string().min(1, 'HELIUS_WEBHOOK_SECRET is required'),
   SOLANA_RPC_URL: z.string().url('SOLANA_RPC_URL must be a valid URL'),
-  VAULT_PRIVATE_KEY: z.string().min(1, 'VAULT_PRIVATE_KEY is required'),
-  VAULT_PUBLIC_KEY: z.string().min(1, 'VAULT_PUBLIC_KEY is required'),
   RESEND_API_KEY: z.string().min(1, 'RESEND_API_KEY is required'),
   FRONTEND_URL: z.string().url('FRONTEND_URL must be a valid URL'),
 
   // ── Optional with defaults ────────────────────────────────────────
   PORT: z.string().default('5000'),
-  NODE_ENV: z.string().default('production'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   BACKEND_URL: z.string().default('http://localhost:5000'),
   COINGECKO_URL: z.string().default(''),
 
   // ── Optional (no defaults, used when present) ─────────────────────
   JUPITER_API_KEY: z.string().optional(),
-  JWT_SECRET: z.string().optional(),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   EMAIL_FROM: z.string().optional(),
   SENTRY_DSN: z.string().url().optional(),
 });

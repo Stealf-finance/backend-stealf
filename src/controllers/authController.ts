@@ -117,6 +117,18 @@ export class UserController {
                 return res.status(401).json({ error: 'Invalid JWT signature' });
             }
 
+            // SECURITY: Verify email was confirmed via magic link before creating account
+            const preAuthToken = req.headers['x-preauth-token'] as string;
+            if (preAuthToken) {
+                const preAuthStatus = await PreAuthService.verifyPreAuthToken(preAuthToken);
+                if (!preAuthStatus || !preAuthStatus.verified) {
+                    return res.status(403).json({ error: 'Email verification required' });
+                }
+                if (preAuthStatus.email !== email || preAuthStatus.pseudo !== pseudo) {
+                    return res.status(403).json({ error: 'Pre-auth token does not match registration data' });
+                }
+            }
+
             const decoded = decodeSessionJwt(sessionJWT);
             const turnkey_subOrgId = decoded.organizationId;
 
@@ -160,6 +172,7 @@ export class UserController {
     static async getUser(req: Request, res: Response, next: NextFunction) {
         try {
             const { userId } = req.params;
+            const mongoUserId = (req as any).user?.mongoUserId;
 
             logger.debug({ userId }, 'getUser called');
             const user = await User.findOne({ cash_wallet: userId });
@@ -167,8 +180,10 @@ export class UserController {
                 return res.status(404).json({ error: 'User not found '});
             }
 
-            user.lastLoginAt = new Date();
-            await user.save();
+            // SECURITY: Only allow users to access their own profile
+            if (!mongoUserId || user._id.toString() !== mongoUserId) {
+                return res.status(403).json({ error: 'Access denied' });
+            }
 
             return res.json({
                 success: true,
