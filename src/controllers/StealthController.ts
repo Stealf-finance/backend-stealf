@@ -6,16 +6,23 @@
 
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import bs58 from 'bs58';
 import { StealthAddressService } from '../services/stealth/stealth-address.service';
 import { StealthTransferService } from '../services/stealth/stealth-transfer.service';
 import { StealthScannerService } from '../services/stealth/stealth-scanner.service';
+import { StealthBalanceService } from '../services/stealth/stealth-balance.service';
 import { StealthPayment } from '../models/StealthPayment';
 import { User } from '../models/User';
 import { signAndSendCashWalletTransaction } from '../services/auth/turnkeySign.service';
+import { awardPoints } from '../services/points.service';
+
+const POOL_PDA = new PublicKey('25MjNuRJiMhRgnGobfndBQQqehu5GhdZ1Ts4xyPYfTWj');
 
 const stealthAddressService = new StealthAddressService();
 const stealthTransferService = new StealthTransferService();
 const stealthScannerService = new StealthScannerService();
+const stealthBalanceService = new StealthBalanceService();
 
 // --- Schemas Zod ---
 
@@ -37,8 +44,15 @@ const registerPaymentSchema = z.object({
   txSignature: z.string().min(64),
   ephemeralR: z.string().min(32),
   viewTag: z.number().int().min(0).max(255),
+  walletType: z.enum(['wealth', 'cash']).optional().default('wealth'),
 });
 
+
+const poolMooveSchema = z.object({
+  fromWallet: z.string().min(32),
+  toWallet: z.string().min(32),
+  lamports: z.number().int().positive(),
+});
 
 const spendPrepareSchema = z.object({
   paymentId: z.string().min(1),
@@ -50,9 +64,57 @@ const spendConfirmSchema = z.object({
   txSignature: z.string().min(64),
 });
 
+// Schema partagé pour l'enregistrement wealth et cash (mêmes champs)
+const registerCashSchema = z.object({
+  viewingPublicKey: z.string().min(32),
+  viewingPrivateKeyHex: z.string().min(64).max(64),
+  spendingPublicKey: z.string().min(32),
+});
+
 // --- Handlers ---
 
 export class StealthController {
+  /**
+   * POST /api/stealth/register-cash
+   * Enregistre la viewing key et la spending key du cash wallet.
+   */
+  static async registerCash(req: Request, res: Response) {
+    try {
+      const parsed = registerCashSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: 'Invalid input',
+          details: parsed.error.flatten().fieldErrors,
+        });
+      }
+      const userId = req.user!.userId;
+      const result = await stealthAddressService.registerCashViewingKey(userId, parsed.data);
+      return res.status(201).json({ metaAddress: result.metaAddress });
+    } catch (err: any) {
+      if (err?.statusCode === 409) {
+        return res.status(409).json({ error: 'Cash stealth already registered' });
+      }
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * GET /api/stealth/cash/meta-address
+   * Retourne la meta-adresse publique du cash wallet de l'utilisateur.
+   */
+  static async getCashMetaAddress(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const result = await stealthAddressService.getCashMetaAddress(userId);
+      if (!result) {
+        return res.status(404).json({ error: 'Cash stealth address not registered' });
+      }
+      return res.json({ metaAddress: result.metaAddress });
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
   /**
    * GET /api/stealth/meta-address
    * Retourne la meta-adresse publique de l'utilisateur authentifié.
@@ -66,6 +128,42 @@ export class StealthController {
       }
       // Ne jamais retourner la viewing private key
       return res.json({ metaAddress: result.metaAddress });
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * GET /api/stealth/cash/balance
+   * Retourne le solde cash unifié : adresse principale + UTXOs stealth spendable.
+   */
+  static async getCashBalance(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const result = await stealthBalanceService.getCashBalance(userId, user.cash_wallet);
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * POST /api/stealth/cash/scan
+   * Déclenche un scan immédiat des UTXOs stealth cash pour l'utilisateur.
+   */
+  static async scanCash(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const user = await User.findById(userId);
+      if (!user || !user.cashStealthEnabled) {
+        return res.status(404).json({ error: 'Cash stealth not registered' });
+      }
+      const result = await stealthScannerService.scanCashForUser(user as any);
+      return res.json(result);
     } catch (err) {
       return res.status(500).json({ error: 'Internal server error' });
     }
@@ -91,6 +189,40 @@ export class StealthController {
       if (err?.statusCode === 409) {
         return res.status(409).json({ error: 'Stealth already registered' });
       }
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * GET /api/stealth/wealth/balance
+   * Returns spendable stealth UTXOs for the wealth wallet.
+   */
+  static async getWealthBalance(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const spendablePayments = await StealthPayment.find({
+        userId,
+        walletType: 'wealth',
+        status: 'spendable',
+      }).lean();
+
+      let stealthBalance = 0;
+      for (const p of spendablePayments) {
+        stealthBalance += Number.parseInt(p.amountLamports, 10);
+      }
+
+      return res.json({
+        stealthBalance,
+        stealthPayments: spendablePayments.map((p) => ({
+          _id: String(p._id),
+          stealthAddress: p.stealthAddress,
+          amountLamports: p.amountLamports,
+          txSignature: p.txSignature,
+          ephemeralR: p.ephemeralR,
+          status: 'spendable' as const,
+        })),
+      });
+    } catch (err) {
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -145,11 +277,13 @@ export class StealthController {
         amountLamports,
       });
 
+      const pointsEarned = await awardPoints(req.user!.userId, 'stealth_transfer');
       return res.json({
         serializedTx: result.serializedTx,
         stealthAddress: result.stealthAddress,
         ephemeralR: result.ephemeralR,
         viewTag: result.viewTag,
+        pointsEarned,
       });
     } catch (err: any) {
       if (err?.message?.includes('parseMetaAddress') || err?.message?.includes('base58')) {
@@ -193,7 +327,8 @@ export class StealthController {
         user.cash_wallet || undefined
       );
 
-      return res.json({ txSignature, stealthAddress, ephemeralR, viewTag });
+      const pointsEarned = await awardPoints(req.user!.userId, 'stealth_transfer');
+      return res.json({ txSignature, stealthAddress, ephemeralR, viewTag, pointsEarned });
     } catch (err: any) {
       if (err?.message?.includes('parseMetaAddress') || err?.message?.includes('base58')) {
         return res.status(400).json({ error: 'Invalid meta-address format' });
@@ -253,7 +388,7 @@ export class StealthController {
         });
       }
       const userId = req.user!.userId;
-      const { stealthAddress, amountLamports, txSignature, ephemeralR, viewTag } = parsed.data;
+      const { stealthAddress, amountLamports, txSignature, ephemeralR, viewTag, walletType } = parsed.data;
 
       // Upsert : si la TX a déjà été détectée par le scanner, ne pas dupliquer
       const existing = await StealthPayment.findOne({ userId, txSignature });
@@ -268,6 +403,7 @@ export class StealthController {
         txSignature,
         ephemeralR,
         viewTag,
+        walletType,
         detectedAt: new Date(),
         status: 'spendable',
       });
@@ -280,6 +416,85 @@ export class StealthController {
         return res.json({ paymentId: existing?._id, alreadyExists: true });
       }
       return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * POST /api/stealth/pool-moove
+   * Transfère SOL entre wallets via le Privacy Pool — casse le lien on-chain.
+   * TX1: fromWallet → Pool PDA (signé Turnkey)
+   * TX2: Pool PDA → toWallet (signé pool authority)
+   * Aucun compte commun visible entre les deux TX.
+   */
+  static async poolMoove(req: Request, res: Response) {
+    try {
+      const parsed = poolMooveSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten().fieldErrors });
+      }
+
+      const mongoUserId = (req as any).user?.mongoUserId;
+      const user = await User.findById(mongoUserId);
+      if (!user?.turnkey_subOrgId) {
+        return res.status(400).json({ error: 'No Turnkey sub-organization found' });
+      }
+
+      const { fromWallet, toWallet, lamports } = parsed.data;
+      const connection = new Connection(process.env.SOLANA_RPC_URL!, 'confirmed');
+
+      // TX1 : fromWallet → Pool PDA
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      const depositTx = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: new PublicKey(fromWallet),
+      }).add(
+        SystemProgram.transfer({
+          fromPubkey: new PublicKey(fromWallet),
+          toPubkey: POOL_PDA,
+          lamports,
+        })
+      );
+
+      const txHex = depositTx.serialize({ requireAllSignatures: false }).toString('hex');
+      const depositSig = await signAndSendCashWalletTransaction(user.turnkey_subOrgId, txHex, fromWallet);
+      console.log(`[PoolMoove] TX1 deposit: ${depositSig}`);
+
+      // Attendre confirmation TX1 avant de lancer TX2
+      await connection.confirmTransaction(depositSig, 'confirmed');
+
+      // TX2 : Pool Authority → toWallet (SystemProgram.transfer signé par la pool authority)
+      // Note : le lien on-chain est cassé car Pool Authority ≠ Pool PDA ≠ fromWallet
+      const poolAuthorityPrivKey = process.env.POOL_AUTHORITY_PRIVATE_KEY!;
+      let authorityKeypair: Keypair;
+      try {
+        authorityKeypair = Keypair.fromSecretKey(bs58.decode(poolAuthorityPrivKey));
+      } catch {
+        authorityKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(poolAuthorityPrivKey)));
+      }
+
+      const { blockhash: blockhash2 } = await connection.getLatestBlockhash('confirmed');
+      const withdrawTx = new Transaction({
+        recentBlockhash: blockhash2,
+        feePayer: authorityKeypair.publicKey,
+      }).add(
+        SystemProgram.transfer({
+          fromPubkey: authorityKeypair.publicKey,
+          toPubkey: new PublicKey(toWallet),
+          lamports,
+        })
+      );
+      withdrawTx.sign(authorityKeypair);
+      const withdrawSig = await connection.sendRawTransaction(withdrawTx.serialize());
+      await connection.confirmTransaction(withdrawSig, 'confirmed');
+      console.log(`[PoolMoove] TX2 withdraw: ${withdrawSig}`);
+
+      return res.json({
+        depositTxSignature: depositSig,
+        withdrawTxSignature: withdrawSig,
+      });
+    } catch (err: any) {
+      console.error('[PoolMoove] Error:', err?.message);
+      return res.status(500).json({ error: err?.message || 'Internal server error' });
     }
   }
 

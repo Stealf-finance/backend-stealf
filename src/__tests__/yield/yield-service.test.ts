@@ -53,6 +53,16 @@ jest.mock("../../models/VaultShare", () => ({
   VaultType: {},
 }));
 
+// Mock axios — Jito uses POST, Marinade uses GET
+// Jito: POST stake_pool_stats → { apy: [{ data: 0.075, date: "..." }] }
+// Marinade: GET msol/apy/1y → { value: 0.068 }
+jest.mock("axios", () => ({
+  post: jest.fn().mockResolvedValue({
+    data: { apy: [{ data: 0.075, date: new Date().toISOString() }] },
+  }),
+  get: jest.fn().mockResolvedValue({ data: { value: 0.068 } }),
+}));
+
 // Mock spl-stake-pool
 jest.mock("@solana/spl-stake-pool", () => ({
   depositSol: jest.fn().mockResolvedValue({
@@ -137,6 +147,18 @@ describe("YieldService", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Return cached APY so getAPYRates() never reaches axios (axios mock is Jupiter-shaped)
+    const redis = require("../../config/redis").default;
+    const cachedApy = JSON.stringify({
+      jitoApy: 7.5,
+      marinadeApy: 6.8,
+      lastUpdated: new Date().toISOString(),
+      stale: false,
+    });
+    redis.get.mockImplementation((key: string) =>
+      key === "yield:apy" ? Promise.resolve(cachedApy) : Promise.resolve(null)
+    );
+    redis.setex.mockResolvedValue("OK");
   });
 
   // ==================== 11.1: Deposit Flow ====================

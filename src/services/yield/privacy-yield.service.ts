@@ -123,8 +123,9 @@ class PrivacyYieldService {
           if (share) {
             const nextIndex = BigInt((share.snapshotIndex ?? 0) + 1);
             const enhancementsService = getYieldMpcEnhancementsService();
-            await enhancementsService.takeBalanceSnapshot(userId, 0, nextIndex);
-            await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: Number(nextIndex) });
+            const snapResult = await enhancementsService.takeBalanceSnapshot(userId, 0, nextIndex);
+            const usedIndex = snapResult.data?.usedIndex ?? Number(nextIndex);
+            await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: usedIndex });
           }
         } catch (err: any) {
           console.error("[YieldMpcEnhancements] takeBalanceSnapshot (deposit) failed:", err.message);

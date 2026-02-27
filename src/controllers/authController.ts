@@ -7,6 +7,7 @@ import { is } from 'zod/v4/locales';
 import { decodeSessionJwt } from '../middleware/verifyAuth';
 import { createUser } from '../services/auth/createUser';
 import * as magicLinkService from '../services/auth/magicLinkService';
+import { awardPoints } from '../services/points.service';
 import { PreAuthService } from '../services/auth/preAuthService';
 
 export class UserController {
@@ -168,6 +169,7 @@ export class UserController {
 
             user.lastLoginAt = new Date();
             await user.save();
+            awardPoints(user._id.toString(), 'daily_bonus').catch(() => {});
 
             return res.json({
                 success: true,

@@ -69,6 +69,64 @@ export class StealthAddressService {
   }
 
   /**
+   * Enregistre la viewing key du cash wallet de l'utilisateur.
+   * Reçoit la clé privée en clair (sur HTTPS), la chiffre AES-256-GCM et la persiste.
+   * Namespace 'cashStealth*' — totalement isolé de 'stealth*' (wealth wallet).
+   */
+  async registerCashViewingKey(
+    userId: string,
+    params: {
+      viewingPublicKey: string;         // base58 X25519 public key
+      viewingPrivateKeyHex: string;     // hex viewing private key (32 bytes)
+      spendingPublicKey: string;        // base58 ed25519 public key
+    },
+  ): Promise<{ metaAddress: string }> {
+    const user = await User.findById(userId);
+    if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+
+    if (user.cashStealthEnabled) {
+      throw Object.assign(new Error('Cash stealth already registered for this user'), { statusCode: 409 });
+    }
+
+    const viewingPrivBytes = Buffer.from(params.viewingPrivateKeyHex, 'hex');
+    const encryptedViewingPrivate = encryptBytes(new Uint8Array(viewingPrivBytes));
+
+    user.cashStealthEnabled = true;
+    user.cashStealthSpendingPublic = params.spendingPublicKey;
+    user.cashStealthViewingPublic = params.viewingPublicKey;
+    user.cashStealthViewingPrivateEnc = encryptedViewingPrivate;
+    await user.save();
+
+    const spendingPub = new Uint8Array(bs58.decode(params.spendingPublicKey));
+    const viewingPub = new Uint8Array(bs58.decode(params.viewingPublicKey));
+    const metaAddress = stealthCryptoService.encodeMetaAddress(spendingPub, viewingPub);
+
+    return { metaAddress };
+  }
+
+  /**
+   * Retourne la meta-adresse publique du cash wallet si le stealth cash est activé.
+   * Ne retourne jamais la viewing private key.
+   */
+  async getCashMetaAddress(userId: string): Promise<{ metaAddress: string } | null> {
+    const user = await User.findById(userId);
+    if (
+      !user ||
+      !user.cashStealthEnabled ||
+      !user.cashStealthSpendingPublic ||
+      !user.cashStealthViewingPublic
+    ) {
+      return null;
+    }
+
+    const spendingPub = new Uint8Array(bs58.decode(user.cashStealthSpendingPublic));
+    const viewingPub = new Uint8Array(bs58.decode(user.cashStealthViewingPublic));
+    const metaAddress = stealthCryptoService.encodeMetaAddress(spendingPub, viewingPub);
+
+    return { metaAddress };
+  }
+
+  /**
    * Déchiffre la viewing private key pour usage interne du scanner.
    * NE PAS exposer dans les réponses API.
    */

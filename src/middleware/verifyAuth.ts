@@ -121,6 +121,6 @@ export async function verifyAuth(req: Request, res: Response, next: NextFunction
 
     } catch (error) {
         console.error('Auth verification error:', error);
-        return res.status(401).json({ error: 'Authentification failed' });
+        return res.status(401).json({ error: 'Authentication failed' });
     }
 }

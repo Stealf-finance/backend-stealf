@@ -5,6 +5,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { createServer } from 'http';
 import path from 'path';
+import helmet from 'helmet';
 import userRoutes from './routes/userRoutes'
 import walletRoutes from './routes/walletRoutes';
 import  webhookHeliusRoutes  from './routes/webhookHeliusRoutes'
@@ -12,14 +13,25 @@ import privateTransferRoutes from './routes/privateTransferRoutes';
 import swapRoutes from './routes/swapRoutes';
 import yieldRoutes from './routes/yieldRoutes';
 import stealthRoutes from './routes/stealth.routes';
+import lendingRoutes from './routes/lending.routes';
+import pointsRoutes from './routes/points.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getStealthScannerService } from './services/stealth/stealth-scanner.service';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
 import { getSocketService } from './services/socket/socketService';
+import {
+  swapLimiter,
+  yieldLimiter,
+  walletLimiter,
+} from './middleware/rateLimiter';
 
 const app = express();
 
 const httpServer = createServer(app);
+
+// SECURITY: HTTP security headers (helmet) — before all other middleware
+// contentSecurityPolicy disabled to avoid breaking the Rhino.fi WebView
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // SECURITY: Limit request body size to prevent DoS
 app.use(express.json({ limit: '10kb' }));
@@ -32,27 +44,51 @@ app.get('/.well-known/apple-app-site-association', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/.well-known/apple-app-site-association'));
 });
 
+// SECURITY: CORS — restrict to known origins (no wildcard in production)
+const rawAllowedOrigins = process.env.ALLOWED_ORIGINS;
+const allowedOrigins: string[] = rawAllowedOrigins
+  ? rawAllowedOrigins.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+
+  // React Native native builds do not send Origin — always allow
+  if (!origin) {
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    return next();
+  }
+
+  // In development, allow localhost origins by default
+  const isDev = process.env.NODE_ENV !== 'production';
+  const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(origin);
+  const isAllowed = allowedOrigins.includes(origin) || (isDev && isLocalhost);
+
+  if (!isAllowed) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  res.header('Access-Control-Allow-Origin', origin);
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  
+
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
 
+// SECURITY: Rate limiting per route group
 app.use('/api/users', userRoutes);
-app.use('/api/wallet', walletRoutes);
+app.use('/api/wallet', walletLimiter, walletRoutes);
 app.use('/api/private-transfer', privateTransferRoutes);
 
-app.use('/api/swap', swapRoutes);
-app.use('/api/yield', yieldRoutes);
+app.use('/api/swap', swapLimiter, swapRoutes);
+app.use('/api/yield', yieldLimiter, yieldRoutes);
+app.use('/api/lending', yieldLimiter, lendingRoutes);
 app.use('/api/stealth', stealthRoutes);
-app.use('/api/helius', webhookHeliusRoutes );
+app.use('/api/points', pointsRoutes);
+app.use('/api/helius', webhookHeliusRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
@@ -60,6 +96,41 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT;
+
+// SECURITY: Graceful shutdown on SIGTERM/SIGINT
+let isShuttingDown = false;
+
+async function shutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log(`[Shutdown] Received ${signal}. Starting graceful shutdown…`);
+
+  // Force exit after 10 seconds
+  const forceExit = setTimeout(() => {
+    console.error('[Shutdown] Graceful shutdown timed out after 10s. Forcing exit.');
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+
+  try {
+    await new Promise<void>((resolve) => {
+      httpServer.close(() => {
+        console.log('[Shutdown] HTTP server closed.');
+        resolve();
+      });
+    });
+
+    await mongoose.connection.close();
+    console.log('[Shutdown] MongoDB connection closed.');
+
+    console.log('[Shutdown] Graceful shutdown complete.');
+    process.exit(0);
+  } catch (err) {
+    console.error('[Shutdown] Error during shutdown:', err);
+    process.exit(1);
+  }
+}
 
 async function start() {
   try {
@@ -76,12 +147,16 @@ async function start() {
     socketService.initialize(httpServer);
     console.log('Socket.io initialized');
 
-    // Démarrer le job de scanning stealth (60s interval)
+    // Start stealth scanning job (60s interval)
     getStealthScannerService().startScanningJob();
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
-    })
+    });
+
+    // Register graceful shutdown handlers
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 
   } catch (error) {
     console.error(' Failed to start server:', error);

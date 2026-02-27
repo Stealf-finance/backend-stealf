@@ -1,5 +1,5 @@
-import { PublicKey } from "@solana/web3.js";
-import { BN } from "@coral-xyz/anchor";
+import { PublicKey, Connection } from "@solana/web3.js";
+import { BN, AnchorProvider } from "@coral-xyz/anchor";
 import { randomBytes } from "crypto";
 import { ArciumVaultService } from "./arcium-vault.service";
 
@@ -186,14 +186,26 @@ export class YieldMpcEnhancementsService {
     userId: string,
     _vaultType: number,
     snapshotIndex: bigint
-  ): Promise<MpcResult<{ snapshotPda: string }>> {
+  ): Promise<MpcResult<{ snapshotPda: string; usedIndex: number }>> {
     return this.h.executeMpcWithRetry(
       "balance_snapshot",
       async (computationOffset) => {
         await this.h.getMxePublicKey();
         const userIdHash = this.h.hashUserId(userId);
         const userSharePDA = this.h.getUserSharePDA(userIdHash);
-        const snapshotPDA = this.getSnapshotPDA(userSharePDA, snapshotIndex);
+
+        // Find next available snapshot index: skip PDAs that already exist on-chain
+        // (can happen if previous MongoDB update failed after a successful snapshot)
+        const connection = ((this.h.getProgram().provider) as AnchorProvider).connection as Connection;
+        let targetIndex = snapshotIndex;
+        while (true) {
+          const pda = this.getSnapshotPDA(userSharePDA, targetIndex);
+          const acc = await connection.getAccountInfo(pda);
+          if (!acc) break;
+          targetIndex++;
+        }
+
+        const snapshotPDA = this.getSnapshotPDA(userSharePDA, targetIndex);
         const accounts = this.h.getArciumAccounts(
           computationOffset,
           "balance_snapshot"
@@ -203,7 +215,7 @@ export class YieldMpcEnhancementsService {
         const sig = await program.methods
           .queueBalanceSnapshot(
             computationOffset,
-            new BN(snapshotIndex.toString())
+            new BN(targetIndex.toString())
           )
           .accountsPartial({
             payer: program.provider.publicKey,
@@ -212,14 +224,14 @@ export class YieldMpcEnhancementsService {
             userVaultShare: userSharePDA,
             userBalanceSnapshot: snapshotPDA,
           })
-          .rpc({ skipPreflight: true, commitment: "confirmed" });
+          .rpc({ skipPreflight: false, commitment: "confirmed" });
 
         const finalizeSig = await this.h.awaitFinalizationWithTimeout(
           computationOffset
         );
 
         console.log(
-          `[YieldMpcEnhancements] balance_snapshot taken (index=${snapshotIndex})` +
+          `[YieldMpcEnhancements] balance_snapshot taken (index=${targetIndex})` +
           `\n  ↳ PDA: ${snapshotPDA.toBase58()}` +
           `\n  ↳ queue TX:    https://explorer.solana.com/tx/${sig}?cluster=devnet` +
           `\n  ↳ finalize TX: https://explorer.solana.com/tx/${finalizeSig}?cluster=devnet`
@@ -227,7 +239,7 @@ export class YieldMpcEnhancementsService {
 
         return {
           success: true,
-          data: { snapshotPda: snapshotPDA.toBase58() },
+          data: { snapshotPda: snapshotPDA.toBase58(), usedIndex: Number(targetIndex) },
           txSignature: sig,
           finalizationSignature: finalizeSig,
         };

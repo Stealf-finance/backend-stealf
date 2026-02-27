@@ -18,6 +18,7 @@ import { randomUUID } from "crypto";
 import BN from "bn.js";
 import { VaultShare, VaultType } from "../../models/VaultShare";
 import { getSocketService } from "../socket/socketService";
+import { devLog } from "../../utils/logger";
 import {
   VAULT_PROGRAM_ID,
   MEMO_PROGRAM_ID,
@@ -137,7 +138,7 @@ export async function confirmPrivateDeposit(
     throw new Error(`Private deposit transaction failed: ${JSON.stringify(txInfo.meta.err)}`);
   }
 
-  console.log(`[privateSol] ✅ TX1 confirmed (user→authority): ${signature}`);
+  devLog(`[privateSol] ✅ TX1 confirmed (user→authority): ${signature}`);
 
   // TX2: authority deposits SOL into vault PDA
   const authority = getVaultAuthority();
@@ -171,11 +172,11 @@ export async function confirmPrivateDeposit(
     "confirmed"
   );
 
-  console.log(`[privateSol] ✅ TX2 authority→vault confirmed: ${vaultDepositSig}`);
+  devLog(`[privateSol] ✅ TX2 authority→vault confirmed: ${vaultDepositSig}`);
 
   // Stake (no-op on devnet)
   if (isDevnet()) {
-    console.log(`[privateSol] DEVNET: skipping ${vaultType} staking`);
+    devLog(`[privateSol] DEVNET: skipping ${vaultType} staking`);
   } else if (vaultType === "sol_jito") {
     await executeJitoStaking(connection, amountLamports);
   } else {
@@ -196,7 +197,7 @@ export async function confirmPrivateDeposit(
     txSignature: vaultDepositSig, // store authority→vault TX, not user's TX1
   });
 
-  console.log(`[privateSol] 🔐 Private VaultShare created: ${share._id}`);
+  devLog(`[privateSol] 🔐 Private VaultShare created: ${share._id}`);
 
   getSocketService().emitPrivateTransferUpdate(userId, {
     transferId: share._id.toString(),
@@ -287,7 +288,7 @@ export async function executePrivateWithdraw(
     "confirmed"
   );
 
-  console.log(`[privateSol] ✅ Private withdraw vault→authority→${userWallet}: ${txSignature}`);
+  devLog(`[privateSol] ✅ Private withdraw vault→authority→${userWallet}: ${txSignature}`);
 
   // Update VaultShares (FIFO)
   const rate = await getExchangeRate(vaultType);

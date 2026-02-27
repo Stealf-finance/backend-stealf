@@ -12,6 +12,7 @@ import {
 import BN from "bn.js";
 import { VaultShare, VaultType } from "../../models/VaultShare";
 import { getSocketService } from "../socket/socketService";
+import { devLog } from "../../utils/logger";
 import {
   VAULT_PROGRAM_ID,
   MIN_DEPOSIT_LAMPORTS,
@@ -108,16 +109,16 @@ export async function confirmDeposit(
   const feePayer =
     (txInfo.transaction.message as any).accountKeys?.[0]?.toString() ||
     txInfo.transaction.message.getAccountKeys().get(0)?.toString();
-  console.log(`[solDeposit] ✅ Transaction confirmed: ${signature}`);
-  console.log(`[solDeposit] Fee payer: ${feePayer} | User: ${userId}`);
+  devLog(`[solDeposit] ✅ Transaction confirmed: ${signature}`);
+  devLog(`[solDeposit] Fee payer: ${feePayer} | User: ${userId}`);
 
   const depositAmount = extractDepositAmount(txInfo);
   if (!depositAmount) throw new Error("Could not extract deposit amount from transaction");
-  console.log(`[solDeposit] Amount: ${depositAmount} lamports (${depositAmount / LAMPORTS_PER_SOL} SOL)`);
+  devLog(`[solDeposit] Amount: ${depositAmount} lamports (${depositAmount / LAMPORTS_PER_SOL} SOL)`);
 
   // Stake (no-op on devnet)
   if (isDevnet()) {
-    console.log(`[solDeposit] DEVNET: skipping ${vaultType} staking`);
+    devLog(`[solDeposit] DEVNET: skipping ${vaultType} staking`);
   } else if (vaultType === "sol_jito") {
     await executeJitoStaking(connection, depositAmount);
   } else {
@@ -126,7 +127,7 @@ export async function confirmDeposit(
 
   const rate = await getExchangeRate(vaultType);
   const sharesAmount = depositAmount / rate;
-  console.log(`[solDeposit] Rate: ${rate} | Shares: ${sharesAmount}`);
+  devLog(`[solDeposit] Rate: ${rate} | Shares: ${sharesAmount}`);
 
   const share = await VaultShare.create({
     userId,
@@ -141,8 +142,8 @@ export async function confirmDeposit(
 
   // Log encryption sanity check
   const rawDoc = await VaultShare.findById(share._id).lean();
-  console.log(`[solDeposit] 🔐 VaultShare created: ${share._id}`);
-  console.log(`[solDeposit] 🔐 Encrypted in DB:`, {
+  devLog(`[solDeposit] 🔐 VaultShare created: ${share._id}`);
+  devLog(`[solDeposit] 🔐 Encrypted in DB:`, {
     sharesAmount: typeof (rawDoc as any)?.sharesAmount === "string"
       ? (rawDoc as any).sharesAmount.substring(0, 30) + "..." : (rawDoc as any)?.sharesAmount,
     depositAmountLamports: typeof (rawDoc as any)?.depositAmountLamports === "string"

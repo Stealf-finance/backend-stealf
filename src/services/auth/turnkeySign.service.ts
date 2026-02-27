@@ -1,5 +1,6 @@
 import { Turnkey } from "@turnkey/sdk-server";
 import { Connection } from "@solana/web3.js";
+import { devLog } from "../../utils/logger";
 
 let _turnkeyClient: Turnkey | null = null;
 let _connection: Connection | null = null;
@@ -59,7 +60,7 @@ export async function signAndSendCashWalletTransaction(
     signWith = account.address;
   }
 
-  console.log(`[TurnkeySign] Signing with address: ${signWith}`);
+  devLog(`[TurnkeySign] Signing with address: ${signWith}`);
 
   const signResult = await client.signTransaction({
     organizationId: subOrgId,
@@ -76,9 +77,9 @@ export async function signAndSendCashWalletTransaction(
     preflightCommitment: "processed",
   });
 
-  console.log(`[TurnkeySign] Transaction sent: ${txSignature}`);
+  devLog(`[TurnkeySign] Transaction sent: ${txSignature}`);
   await conn.confirmTransaction({ signature: txSignature, blockhash, lastValidBlockHeight }, 'processed');
-  console.log(`[TurnkeySign] Transaction confirmed (processed): ${txSignature}`);
+  devLog(`[TurnkeySign] Transaction confirmed (processed): ${txSignature}`);
   return txSignature;
 }
 
@@ -111,7 +112,7 @@ export async function signOnlyCashWalletTransaction(
     signWith = account.address;
   }
 
-  console.log(`[TurnkeySign] Sign-only with address: ${signWith}`);
+  devLog(`[TurnkeySign] Sign-only with address: ${signWith}`);
 
   // Turnkey expects hex — convert base64 → hex
   const unsignedHex = Buffer.from(unsignedTransactionBase64, 'base64').toString('hex');

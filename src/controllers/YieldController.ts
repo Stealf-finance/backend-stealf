@@ -10,6 +10,8 @@ import { VaultShare } from "../models/VaultShare";
 import { getTotalActiveDepositLamports } from "../services/yield/yield-rates.service";
 import { confirmPrivateDepositArcium } from "../services/yield/private-sol.service";
 import { getBatchStakingService } from "../services/yield/batch-staking.service";
+import { stripProdError } from "../utils/logger";
+import { awardPoints } from "../services/points.service";
 
 // --- Zod schemas ---
 
@@ -116,7 +118,7 @@ export class YieldController {
     } catch (error: any) {
       console.error("YieldController.deposit error:", error);
       return res.status(error.message?.includes("Minimum") ? 422 : 500).json({
-        error: error.message || "Failed to build deposit transaction",
+        error: stripProdError(error.message) || "Failed to build deposit transaction",
       });
     }
   }
@@ -217,7 +219,8 @@ export class YieldController {
                 const enhService = getYieldMpcEnhancementsService();
                 const snapResult = await enhService.takeBalanceSnapshot(userId, vaultTypeNum, newIndex);
                 if (snapResult.success && share) {
-                  await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: currentIndex + 1 });
+                  const usedIndex = snapResult.data?.usedIndex ?? currentIndex + 1;
+                  await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: usedIndex });
                 }
               } catch (err: any) {
                 console.error("[Arcium] takeBalanceSnapshot (withdraw) failed:", err.message);
@@ -225,7 +228,8 @@ export class YieldController {
             })();
           }
 
-          return res.status(200).json({ ...result, sufficient: true });
+          const pointsEarned = await awardPoints(userId, 'yield_withdraw');
+          return res.status(200).json({ ...result, sufficient: true, pointsEarned });
         }
       }
 
@@ -262,7 +266,7 @@ export class YieldController {
           ? 422
           : 500;
       return res.status(statusCode).json({
-        error: error.message || "Failed to build withdrawal transaction",
+        error: stripProdError(error.message) || "Failed to build withdrawal transaction",
       });
     }
   }
@@ -359,9 +363,10 @@ export class YieldController {
               const enhService = getYieldMpcEnhancementsService();
               const snapResult = await enhService.takeBalanceSnapshot(userId, vaultTypeNum, newIndex);
               if (snapResult.success) {
+                const usedIndex = snapResult.data?.usedIndex ?? currentIndex + 1;
                 await VaultShare.updateMany(
                   { _id: { $in: shareIds } },
-                  { snapshotIndex: currentIndex + 1 }
+                  { snapshotIndex: usedIndex }
                 );
               }
             } catch (err: any) {
@@ -370,7 +375,8 @@ export class YieldController {
           })();
         }
 
-        return res.status(200).json(result);
+        const pointsEarned = await awardPoints(userId, 'yield_deposit_private');
+        return res.status(200).json({ ...result, pointsEarned });
       }
 
       // --- Private confirm for USDC withdrawal ---
@@ -392,7 +398,8 @@ export class YieldController {
           amount,
           userPublicKey
         );
-        return res.status(200).json(result);
+        const pointsEarned = await awardPoints(userId, 'yield_withdraw');
+        return res.status(200).json({ ...result, pointsEarned });
       }
 
       // --- Standard confirm ---
@@ -448,11 +455,15 @@ export class YieldController {
         }
       }
 
-      return res.status(200).json(result);
+      const depositAction = type === 'deposit'
+        ? (isPrivate ? 'yield_deposit_private' : 'yield_deposit')
+        : 'yield_withdraw';
+      const pointsEarned = await awardPoints(userId, depositAction);
+      return res.status(200).json({ ...result, pointsEarned });
     } catch (error: any) {
       console.error("YieldController.confirm error:", error);
       return res.status(500).json({
-        error: error.message || "Failed to confirm transaction",
+        error: stripProdError(error.message) || "Failed to confirm transaction",
       });
     }
   }
@@ -476,7 +487,7 @@ export class YieldController {
     } catch (error: any) {
       console.error("YieldController.getBalance error:", error);
       return res.status(500).json({
-        error: error.message || "Failed to get balance",
+        error: stripProdError(error.message) || "Failed to get balance",
       });
     }
   }
@@ -493,9 +504,12 @@ export class YieldController {
         usdcKaminoApy: usdcApy,
       });
     } catch (error: any) {
+      if (error.message === "APY_SERVICE_UNAVAILABLE") {
+        return res.status(503).json({ error: "APY service temporarily unavailable" });
+      }
       console.error("YieldController.getAPY error:", error);
       return res.status(500).json({
-        error: error.message || "Failed to get APY rates",
+        error: stripProdError(error.message) || "Failed to get APY rates",
       });
     }
   }
@@ -524,56 +538,19 @@ export class YieldController {
     } catch (error: any) {
       console.error("YieldController.getDashboard error:", error);
       return res.status(500).json({
-        error: error.message || "Failed to get dashboard",
+        error: stripProdError(error.message) || "Failed to get dashboard",
       });
     }
   }
 
   // --- Auto-Sweep ---
 
-  static async getAutoSweepConfig(req: Request, res: Response) {
-    try {
-      const userId = req.user?.mongoUserId;
-      if (!userId) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
-
-      const sweepService = getAutoSweepService();
-      const config = await sweepService.getConfig(userId);
-      return res.status(200).json(config);
-    } catch (error: any) {
-      console.error("YieldController.getAutoSweepConfig error:", error);
-      return res.status(500).json({
-        error: error.message || "Failed to get auto-sweep config",
-      });
-    }
+  static async getAutoSweepConfig(_req: Request, res: Response) {
+    return res.status(501).json({ error: "Auto-sweep not yet implemented" });
   }
 
-  static async updateAutoSweepConfig(req: Request, res: Response) {
-    try {
-      const parsed = autoSweepConfigSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({
-          error: "Invalid input",
-          details: parsed.error.flatten().fieldErrors,
-        });
-      }
-
-      const userId = req.user?.mongoUserId;
-      if (!userId) {
-        return res.status(401).json({ error: "Authentication required" });
-      }
-
-      const sweepService = getAutoSweepService();
-      await sweepService.configure(userId, parsed.data);
-
-      return res.status(200).json({ success: true, ...parsed.data });
-    } catch (error: any) {
-      console.error("YieldController.updateAutoSweepConfig error:", error);
-      return res.status(500).json({
-        error: error.message || "Failed to update auto-sweep config",
-      });
-    }
+  static async updateAutoSweepConfig(_req: Request, res: Response) {
+    return res.status(501).json({ error: "Auto-sweep not yet implemented" });
   }
 
   // --- Arcium Proof of Yield ---

@@ -1,6 +1,7 @@
 /**
  * Exchange rates, APY, user balance, dashboard, and on-chain consistency checks.
  */
+import axios from "axios";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { getStakePoolAccount } from "@solana/spl-stake-pool";
 import { Marinade, MarinadeConfig } from "@marinade.finance/marinade-ts-sdk";
@@ -16,6 +17,53 @@ import {
   isDevnet,
 } from "./yield.config";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+
+// Public APY endpoints — both use mainnet data regardless of deployment network.
+// APY is a protocol-level metric derived from mainnet staking pool performance.
+const JITO_STATS_URL = "https://kobe.mainnet.jito.network/api/v1/stake_pool_stats";
+const MARINADE_APY_URL = "https://api.marinade.finance/msol/apy/1y";
+const APY_FETCH_TIMEOUT_MS = 8000;
+
+/**
+ * Fetches Jito APY via the official Jito Foundation stake pool stats API.
+ * POST /api/v1/stake_pool_stats — returns a time-series; we take the most recent daily point.
+ * Response: { apy: [{ data: 0.0718, date: "..." }, ...] } — decimal notation.
+ */
+async function fetchJitoAPY(): Promise<number> {
+  const today = new Date().toISOString();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data } = await axios.post(
+    JITO_STATS_URL,
+    {
+      bucket_type: "Daily",
+      range_filter: { start: thirtyDaysAgo, end: today },
+      sort_by: { field: "BlockTime", order: "Desc" },
+    },
+    { timeout: APY_FETCH_TIMEOUT_MS }
+  );
+
+  // Take the most recent data point (sorted Desc → index 0)
+  const latestApy = data?.apy?.[0]?.data;
+  if (typeof latestApy !== "number" || latestApy <= 0) {
+    throw new Error("Jito APY data missing or invalid");
+  }
+  return latestApy * 100; // decimal → percent
+}
+
+/**
+ * Fetches Marinade APY via the Marinade Finance public stats API.
+ * GET /msol/apy/1y — returns { value: 0.0623 } — decimal notation.
+ */
+async function fetchMarinadeAPY(): Promise<number> {
+  const { data } = await axios.get(MARINADE_APY_URL, { timeout: APY_FETCH_TIMEOUT_MS });
+
+  const latestApy = data?.value;
+  if (typeof latestApy !== "number" || latestApy <= 0) {
+    throw new Error("Marinade APY data missing or invalid");
+  }
+  return latestApy * 100; // decimal → percent
+}
 
 /**
  * JitoSOL/SOL or mSOL/SOL exchange rate, cached 5 min in Redis.
@@ -49,24 +97,52 @@ export async function getExchangeRate(vaultType: VaultType): Promise<number> {
 }
 
 /**
- * APY rates for Jito and Marinade, cached 5 min.
- * TODO: calculate from historical rate changes or Jito API.
+ * APY rates for Jito and Marinade, fetched from live public APIs and cached 5 min.
+ *
+ * APY data is always fetched from the Jito and Marinade mainnet APIs — it is a
+ * protocol-level metric independent of whether the app runs on devnet or mainnet.
+ *
+ * `stale: true` → values come from the 24 h backup cache (APIs were unreachable).
+ * Throws 'APY_SERVICE_UNAVAILABLE' when APIs are down AND no backup cache exists.
  */
 export async function getAPYRates(): Promise<{
   jitoApy: number;
   marinadeApy: number;
   lastUpdated: Date;
+  stale: boolean;
 }> {
   const cacheKey = "yield:apy";
+
+  // Serve from fresh cache when available
   const cached = await redisClient.get(cacheKey);
   if (cached) {
     const parsed = JSON.parse(cached);
     return { ...parsed, lastUpdated: new Date(parsed.lastUpdated) };
   }
 
-  const result = { jitoApy: 7.5, marinadeApy: 6.8, lastUpdated: new Date() };
-  await redisClient.setex(cacheKey, RATE_CACHE_TTL, JSON.stringify(result));
-  return result;
+  // Fetch live APY from public APIs
+  try {
+    const [jitoApy, marinadeApy] = await Promise.all([
+      fetchJitoAPY(),
+      fetchMarinadeAPY(),
+    ]);
+    const result = { jitoApy, marinadeApy, lastUpdated: new Date(), stale: false };
+    // Write to both hot cache (5 min) and backup cache (24 h)
+    await Promise.all([
+      redisClient.setex(cacheKey, RATE_CACHE_TTL, JSON.stringify(result)),
+      redisClient.setex(cacheKey + ":backup", 86400, JSON.stringify(result)),
+    ]);
+    return result;
+  } catch (err) {
+    // Live APIs unavailable — check backup cache before giving up
+    const backup = await redisClient.get(cacheKey + ":backup");
+    if (backup) {
+      const parsed = JSON.parse(backup);
+      return { ...parsed, lastUpdated: new Date(parsed.lastUpdated), stale: true };
+    }
+    // No cache at all → signal 503 to the controller
+    throw new Error("APY_SERVICE_UNAVAILABLE");
+  }
 }
 
 /**

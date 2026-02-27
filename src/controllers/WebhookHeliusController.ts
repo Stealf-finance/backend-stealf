@@ -1,7 +1,21 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { TransactionHandler } from '../services/wallet/transactionsHandler';
 import { heliusWebhookPayloadSchema } from '../utils/validations';
+
+/**
+ * Compares two strings using a constant-time algorithm to prevent timing attacks.
+ * Returns false immediately if lengths differ (avoids crypto.timingSafeEqual exception).
+ * Requirements: 5.1, 5.2, 5.3
+ */
+export function isValidWebhookSecret(received: string, expected: string): boolean {
+    if (received.length !== expected.length) return false;
+    return crypto.timingSafeEqual(
+        Buffer.from(received),
+        Buffer.from(expected)
+    );
+}
 
 export class WebhookHeliusController {
 
@@ -16,7 +30,8 @@ export class WebhookHeliusController {
                 return res.status(500).json({ success: false, error: 'Server configuration error' });
             }
 
-            if (!authHeader || authHeader !== expectedSecret) {
+            // SECURITY: Use timing-safe comparison to prevent secret enumeration via timing attacks
+            if (!authHeader || !isValidWebhookSecret(authHeader, expectedSecret)) {
                 console.error('Unauthorized webhook request - invalid secret');
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }

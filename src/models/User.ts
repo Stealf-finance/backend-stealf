@@ -16,12 +16,20 @@ export interface IUser extends Document{
     autoSweepInterval: 'daily' | 'weekly';
     autoSweepMinYield: number; // Minimum yield in SOL before sweeping
     autoSweepVaultType: 'sol_jito' | 'sol_marinade';
-    // Stealth addresses (EIP-5564 adapté Solana) — Requirements 1.3, 1.4
+    // Stealth addresses wealth wallet (EIP-5564 adapté Solana) — Requirements 1.3, 1.4
     stealthEnabled: boolean;
     stealthSpendingPublic?: string;       // base58 32 bytes — clé publique ed25519
     stealthViewingPublic?: string;        // base58 32 bytes — clé publique X25519
     stealthViewingPrivateEnc?: string;    // AES-256-GCM chiffrée (format iv:tag:ciphertext)
     lastStealthScanAt?: Date;
+    // Stealth addresses cash wallet (EIP-5564 adapté Solana) — Requirements 2.2, 4.1
+    cashStealthEnabled: boolean;
+    cashStealthSpendingPublic?: string;   // base58 32 bytes — clé publique ed25519
+    cashStealthViewingPublic?: string;    // base58 32 bytes — clé publique X25519
+    cashStealthViewingPrivateEnc?: string;// AES-256-GCM chiffrée (format iv:tag:ciphertext)
+    // Points system
+    points: number;
+    lastDailyBonusAt?: Date;
 }
 
 const userSchema = new Schema<IUser>({
@@ -103,11 +111,34 @@ const userSchema = new Schema<IUser>({
     lastStealthScanAt: {
         type: Date,
     },
+    // Stealth cash wallet
+    cashStealthEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    cashStealthSpendingPublic: {
+        type: String,
+    },
+    cashStealthViewingPublic: {
+        type: String,
+    },
+    cashStealthViewingPrivateEnc: {
+        type: String,
+    },
+    points: {
+        type: Number,
+        default: 0,
+    },
+    lastDailyBonusAt: {
+        type: Date,
+    },
 }, {
     timestamps: true
 });
 
-// Index pour le scanner stealth (uniquement les users avec stealth activé)
+// Index pour le scanner stealth wealth (uniquement les users avec stealth activé)
 userSchema.index({ stealthEnabled: 1 });
+// Index pour le scanner stealth cash (tâche 1.1)
+userSchema.index({ cashStealthEnabled: 1 });
 
 export const User = mongoose.model<IUser>('User', userSchema);

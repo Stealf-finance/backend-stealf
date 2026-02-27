@@ -5,13 +5,15 @@
  * - Un document avec status 'spent' ne peut jamais repasser à 'spendable'
  * - txSignature est unique par userId (déduplication scanner)
  * - amountLamports est stocké en String pour éviter les problèmes de précision BigInt
+ * - walletType discrimine les UTXOs wealth (défaut) des UTXOs cash (tâche 1.2)
  *
- * Requirements : 3.4, 3.7, 4.3
+ * Requirements : 3.4, 3.7, 4.3, 4.4, 5.4, 5.5
  */
 
 import mongoose, { Document, Schema } from 'mongoose';
 
 export type StealthPaymentStatus = 'pending' | 'spendable' | 'spent';
+export type StealthPaymentWalletType = 'wealth' | 'cash';
 
 export interface IStealthPayment extends Document {
   userId: mongoose.Types.ObjectId;
@@ -22,6 +24,7 @@ export interface IStealthPayment extends Document {
   viewTag: number;              // 0–255
   detectedAt: Date;
   status: StealthPaymentStatus;
+  walletType: StealthPaymentWalletType; // discriminant : 'wealth' (défaut) ou 'cash'
   spendTxSignature?: string;    // TX de dépense (défini une fois status = 'spent')
   spentAt?: Date;
   createdAt: Date;
@@ -68,6 +71,13 @@ const stealthPaymentSchema = new Schema<IStealthPayment>(
       default: 'pending',
       required: true,
     },
+    // Discriminant wallet (tâche 1.2) — 'wealth' par défaut pour rétrocompatibilité
+    walletType: {
+      type: String,
+      enum: ['wealth', 'cash'],
+      default: 'wealth',
+      required: true,
+    },
     // Champs de dépense — définis uniquement après status = 'spent'
     spendTxSignature: {
       type: String,
@@ -86,8 +96,8 @@ const stealthPaymentSchema = new Schema<IStealthPayment>(
 // Déduplication scanner : une seule entrée par (userId, txSignature)
 stealthPaymentSchema.index({ userId: 1, txSignature: 1 }, { unique: true });
 
-// Query paiements spendable par utilisateur
-stealthPaymentSchema.index({ userId: 1, status: 1 });
+// Query paiements par utilisateur, type de wallet et statut (optimise la query balance cash)
+stealthPaymentSchema.index({ userId: 1, walletType: 1, status: 1 });
 
 // Tri historique par date de détection (DESC)
 stealthPaymentSchema.index({ detectedAt: -1 });

@@ -2,6 +2,7 @@ import { Turnkey } from "@turnkey/sdk-server";
 import { User, IUser } from "../../models/User";
 import { getHeliusWebhookManager } from "../helius/webhookManager";
 import { privacyBalanceService } from "../privacycash/PrivacyBalanceService";
+import { awardPoints } from "../points.service";
 import bs58 from "bs58";
 
 let _turnkeyClient: Turnkey | null = null;
@@ -159,6 +160,7 @@ export async function findUserByWallet(
   if (user) {
     user.lastLoginAt = new Date();
     await user.save();
+    awardPoints(user._id.toString(), 'daily_bonus').catch(() => {});
   }
 
   return user;

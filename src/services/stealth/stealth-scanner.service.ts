@@ -96,6 +96,7 @@ export class StealthScannerService {
     userId: string,
     spendingPub: Uint8Array,
     viewingPriv: Uint8Array,
+    walletType: 'wealth' | 'cash' = 'wealth',
   ): Promise<void> {
     // Parse le memo : stealth:v1:<base58(R)>:<hex(viewTag)>
     const parts = sig.memo.replace(STEALTH_MEMO_PREFIX, '').split(':');
@@ -175,10 +176,60 @@ export class StealthScannerService {
           viewTag,
           detectedAt: sig.blockTime ? new Date(sig.blockTime * 1000) : new Date(),
           status: 'spendable',
+          walletType,
         },
       },
       { upsert: true, new: false },
     );
+  }
+
+  /**
+   * Scanne les transactions stealth pour le cash wallet d'un utilisateur.
+   * Symétrique à scanForUser mais utilise les clés cashStealth* et upsert walletType:'cash'.
+   */
+  async scanCashForUser(user: {
+    _id: string | any;
+    cashStealthSpendingPublic: string;
+    cashStealthViewingPublic: string;
+    cashStealthViewingPrivateEnc: string;
+  }): Promise<ScanResult> {
+    const result: ScanResult = { detected: 0, scanned: 0, errors: 0 };
+
+    // Récupérer les signatures d'abord — déchiffrement uniquement si nécessaire
+    let signatures: any[];
+    try {
+      const viewingPubKey = new PublicKey(bs58.decode(user.cashStealthViewingPublic));
+      const connection = this.getConnection();
+      signatures = await connection.getSignaturesForAddress(viewingPubKey, { limit: 100 });
+    } catch (err) {
+      console.error('[CashStealth] getSignaturesForAddress failed:', err);
+      return result;
+    }
+
+    const stealthSigs = signatures.filter(
+      (sig) => sig.memo && sig.memo.startsWith(STEALTH_MEMO_PREFIX) && !sig.err,
+    );
+
+    if (stealthSigs.length === 0) return result;
+
+    // Déchiffrer seulement si des TXs stealth sont trouvées
+    const viewingPriv = await this.decryptViewingKey(user.cashStealthViewingPrivateEnc);
+    const spendingPub = new Uint8Array(bs58.decode(user.cashStealthSpendingPublic));
+
+    for (const sig of stealthSigs) {
+      result.scanned++;
+      try {
+        await this.processSignature(sig, user._id.toString(), spendingPub, viewingPriv, 'cash');
+        result.detected++;
+      } catch (err) {
+        if ((err as any)?.isStealth !== true) {
+          result.errors++;
+          console.error('[CashStealth] processSignature error:', err);
+        }
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -214,15 +265,27 @@ export class StealthScannerService {
   private async runScanCycle(): Promise<void> {
     const { User } = await import('../../models/User');
     try {
-      const users = await User.find({ stealthEnabled: true, stealthViewingPrivateEnc: { $exists: true } }).lean();
-      const results = await Promise.allSettled(users.map((u) => this.scanForUser(u as any)));
-      const totalDetected = results.reduce((sum, r) => {
+      // Passe 1 — wealth stealth
+      const wealthUsers = await User.find({ stealthEnabled: true, stealthViewingPrivateEnc: { $exists: true } }).lean();
+      const wealthResults = await Promise.allSettled(wealthUsers.map((u) => this.scanForUser(u as any)));
+      const wealthDetected = wealthResults.reduce((sum, r) => {
         if (r.status === 'fulfilled') return sum + r.value.detected;
         console.error('[Stealth] scan cycle error:', r.reason);
         return sum;
       }, 0);
+
+      // Passe 2 — cash stealth
+      const cashUsers = await User.find({ cashStealthEnabled: true, cashStealthViewingPrivateEnc: { $exists: true } }).lean();
+      const cashResults = await Promise.allSettled(cashUsers.map((u) => this.scanCashForUser(u as any)));
+      const cashDetected = cashResults.reduce((sum, r) => {
+        if (r.status === 'fulfilled') return sum + r.value.detected;
+        console.error('[CashStealth] scan cycle error:', r.reason);
+        return sum;
+      }, 0);
+
+      const totalDetected = wealthDetected + cashDetected;
       if (totalDetected > 0) {
-        console.log(`[Stealth] Scanner: ${totalDetected} nouveaux paiements détectés`);
+        console.log(`[Stealth] Scanner: ${totalDetected} nouveaux paiements détectés (wealth:${wealthDetected} cash:${cashDetected})`);
       }
     } catch (err) {
       console.error('[Stealth] runScanCycle error:', err);
