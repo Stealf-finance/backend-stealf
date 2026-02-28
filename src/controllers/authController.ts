@@ -161,7 +161,6 @@ export class UserController {
         try {
             const { userId } = req.params;
 
-            console.log(userId);
             const user = await User.findOne({ cash_wallet: userId });
             if (!user){
                 return res.status(404).json({ error: 'User not found '});

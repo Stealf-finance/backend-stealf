@@ -1,6 +1,13 @@
 // dotenv MUST be loaded before any other import that reads process.env at module load time
 import 'dotenv/config';
 
+// Suppress all console output in production
+if (process.env.NODE_ENV === 'production') {
+  console.log = () => {};
+  console.debug = () => {};
+  console.info = () => {};
+}
+
 import express from 'express';
 import mongoose from 'mongoose';
 import { createServer } from 'http';
