@@ -169,7 +169,7 @@ export class UserController {
 
             user.lastLoginAt = new Date();
             await user.save();
-            awardPoints(user._id.toString(), 'daily_bonus').catch(() => {});
+            awardPoints(user._id.toString(), 'daily bonus').catch(() => {});
             StatsService.incrementDailyLogins().catch(() => {});
 
             return res.json({

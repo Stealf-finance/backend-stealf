@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { stripProdError } from '../utils/logger';
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { StealthAddressService } from '../services/stealth/stealth-address.service';
@@ -277,7 +278,7 @@ export class StealthController {
         amountLamports,
       });
 
-      const pointsEarned = await awardPoints(req.user!.userId, 'stealth_transfer');
+      const pointsEarned = await awardPoints(req.user!.userId, 'private transfer');
       return res.json({
         serializedTx: result.serializedTx,
         stealthAddress: result.stealthAddress,
@@ -327,13 +328,13 @@ export class StealthController {
         user.cash_wallet || undefined
       );
 
-      const pointsEarned = await awardPoints(req.user!.userId, 'stealth_transfer');
+      const pointsEarned = await awardPoints(req.user!.userId, 'private transfer');
       return res.json({ txSignature, stealthAddress, ephemeralR, viewTag, pointsEarned });
     } catch (err: any) {
       if (err?.message?.includes('parseMetaAddress') || err?.message?.includes('base58')) {
         return res.status(400).json({ error: 'Invalid meta-address format' });
       }
-      return res.status(500).json({ error: err?.message || 'Internal server error' });
+      return res.status(500).json({ error: stripProdError(err?.message) || 'Internal server error' });
     }
   }
 
@@ -494,7 +495,7 @@ export class StealthController {
       });
     } catch (err: any) {
       console.error('[PoolMoove] Error:', err?.message);
-      return res.status(500).json({ error: err?.message || 'Internal server error' });
+      return res.status(500).json({ error: stripProdError(err?.message) || 'Internal server error' });
     }
   }
 

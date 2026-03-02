@@ -49,6 +49,15 @@ const autoSweepConfigSchema = z.object({
   vaultType: z.enum(["sol_jito", "sol_marinade"]).optional(),
 });
 
+// Schema for POST /api/yield/distribute-yield (admin trigger)
+// All fields optional — endpoint auto-computes from exchange rates if absent.
+// If provided, values are validated to prevent overflow and division-by-zero.
+export const distributeYieldSchema = z.object({
+  vaultType: z.enum(VAULT_TYPES).optional(),
+  rateNum: z.number().int().positive().max(1_100_000).optional(),
+  rateDenom: z.number().int().positive().optional(),
+});
+
 // --- Controller ---
 
 export class YieldController {
@@ -156,6 +165,24 @@ export class YieldController {
           return res.status(200).json(result);
         } else {
           // SOL private withdraw: Arcium balance verify → vault→authority→user
+
+          // --- Double-spend guard: atomically transition active → processing ---
+          // Prevents two concurrent withdrawals from both decrementing the Arcium
+          // encrypted balance and executing on-chain. The "processing" status may
+          // remain stuck if the server crashes — a cleanup job (out of scope for beta)
+          // should reset stale "processing" entries after a TTL.
+          const processingShare = await VaultShare.findOneAndUpdate(
+            { userId, vaultType, status: "active" },
+            { $set: { status: "processing" } },
+            { new: true }
+          );
+          if (!processingShare) {
+            return res.status(409).json({
+              success: false,
+              error: "Withdraw already in progress or no active share found",
+            });
+          }
+
           const lamports = BigInt(Math.round(amount * 1e9));
           const arciumService = isArciumEnabled() ? getArciumVaultService() : null;
 
@@ -170,6 +197,8 @@ export class YieldController {
             try {
               const verifyResult = await arciumService.verifyWithdrawal(userId, lamports);
               if (verifyResult.success && verifyResult.data?.sufficient === false) {
+                // Rollback: restore share to "active" so user can retry
+                await VaultShare.findByIdAndUpdate(processingShare._id, { $set: { status: "active" } });
                 return res.status(422).json({
                   error: "Insufficient encrypted balance",
                   sufficient: false,
@@ -190,6 +219,8 @@ export class YieldController {
               userPublicKey
             );
           } catch (solErr: any) {
+            // Rollback: restore share to "active" so user can retry
+            await VaultShare.findByIdAndUpdate(processingShare._id, { $set: { status: "active" } });
             // SOL TX failed after verifyWithdrawal already decremented encrypted_balance.
             // Compensate by fire-and-forget recordDeposit to restore the on-chain state.
             if (arciumService) {
@@ -228,7 +259,7 @@ export class YieldController {
             })();
           }
 
-          const pointsEarned = await awardPoints(userId, 'yield_withdraw');
+          const pointsEarned = await awardPoints(userId, 'yield withdrawal');
           return res.status(200).json({ ...result, sufficient: true, pointsEarned });
         }
       }
@@ -375,7 +406,7 @@ export class YieldController {
           })();
         }
 
-        const pointsEarned = await awardPoints(userId, 'yield_deposit_private');
+        const pointsEarned = await awardPoints(userId, 'private deposit');
         return res.status(200).json({ ...result, pointsEarned });
       }
 
@@ -398,7 +429,7 @@ export class YieldController {
           amount,
           userPublicKey
         );
-        const pointsEarned = await awardPoints(userId, 'yield_withdraw');
+        const pointsEarned = await awardPoints(userId, 'yield withdrawal');
         return res.status(200).json({ ...result, pointsEarned });
       }
 
@@ -456,8 +487,8 @@ export class YieldController {
       }
 
       const depositAction = type === 'deposit'
-        ? (isPrivate ? 'yield_deposit_private' : 'yield_deposit')
-        : 'yield_withdraw';
+        ? (isPrivate ? 'private deposit' : 'standard deposit')
+        : 'yield withdrawal';
       const pointsEarned = await awardPoints(userId, depositAction);
       return res.status(200).json({ ...result, pointsEarned });
     } catch (error: any) {
@@ -768,6 +799,14 @@ export class YieldController {
 
   static async distributeYield(req: Request, res: Response) {
     try {
+      const parsed = distributeYieldSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Invalid input",
+          details: parsed.error.flatten().fieldErrors,
+        });
+      }
+
       if (!isArciumEnabled()) {
         return res.status(503).json({
           error: "Arcium MPC is not enabled. Set ARCIUM_ENABLED=true.",

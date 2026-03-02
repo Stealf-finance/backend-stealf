@@ -2,11 +2,11 @@ import { User } from '../models/User';
 import { PointsLog, PointsAction } from '../models/PointsLog';
 
 const POINTS_TABLE: Record<PointsAction, number> = {
-  stealth_transfer: 15,
-  yield_deposit: 20,
-  yield_deposit_private: 35,
-  yield_withdraw: 10,
-  daily_bonus: 5,
+  'private transfer': 2,
+  'standard deposit': 2,
+  'private deposit': 6,
+  'yield withdrawal': 1,
+  'daily bonus': 1,
 };
 
 const DAILY_BONUS_COOLDOWN_MS = 20 * 60 * 60 * 1000; // 20h (évite les fuseaux horaires)
@@ -20,7 +20,7 @@ export async function awardPoints(userId: string, action: PointsAction): Promise
   if (!user) return 0;
 
   // Daily bonus: once per 20h
-  if (action === 'daily_bonus') {
+  if (action === 'daily bonus') {
     if (user.lastDailyBonusAt) {
       const elapsed = Date.now() - user.lastDailyBonusAt.getTime();
       if (elapsed < DAILY_BONUS_COOLDOWN_MS) return 0;

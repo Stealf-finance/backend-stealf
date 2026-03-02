@@ -161,7 +161,7 @@ export async function findUserByWallet(
   if (user) {
     user.lastLoginAt = new Date();
     await user.save();
-    awardPoints(user._id.toString(), 'daily_bonus').catch(() => {});
+    awardPoints(user._id.toString(), 'daily bonus').catch(() => {});
     StatsService.incrementDailyLogins().catch(() => {});
   }
 

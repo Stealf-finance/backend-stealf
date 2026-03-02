@@ -47,7 +47,7 @@ export class StatsService {
     try {
       const [totalUsers, totalTransactions, dailyLoginsRaw] = await Promise.all([
         User.countDocuments(),
-        PointsLog.countDocuments({ action: { $ne: 'daily_bonus' } }),
+        PointsLog.countDocuments({ action: { $ne: 'daily bonus' } }),
         redisClient.get(dailyLoginsKey()).catch(() => null),
       ]);
 
