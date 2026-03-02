@@ -1,5 +1,9 @@
 // dotenv MUST be loaded before any other import that reads process.env at module load time
 import 'dotenv/config';
+import { validateEnv } from './utils/validateEnv';
+
+// SECURITY: Fail-fast if critical env vars are missing — runs before any network call
+validateEnv();
 
 // Suppress all console output in production
 if (process.env.NODE_ENV === 'production') {
@@ -22,6 +26,7 @@ import yieldRoutes from './routes/yieldRoutes';
 import stealthRoutes from './routes/stealth.routes';
 import lendingRoutes from './routes/lending.routes';
 import pointsRoutes from './routes/points.routes';
+import statsRoutes from './routes/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getStealthScannerService } from './services/stealth/stealth-scanner.service';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
@@ -52,6 +57,9 @@ app.get('/.well-known/apple-app-site-association', (req, res) => {
 });
 
 // SECURITY: CORS — restrict to known origins (no wildcard in production)
+// ALLOWED_ORIGINS: comma-separated list of allowed web origins (e.g. https://app.stealf.fi)
+// If empty/unset: web requests with an Origin header are blocked in production (safe for mobile-only beta)
+// React Native native builds never send Origin → always allowed regardless of this setting
 const rawAllowedOrigins = process.env.ALLOWED_ORIGINS;
 const allowedOrigins: string[] = rawAllowedOrigins
   ? rawAllowedOrigins.split(',').map((o) => o.trim()).filter(Boolean)
@@ -88,13 +96,14 @@ app.use((req, res, next) => {
 // SECURITY: Rate limiting per route group
 app.use('/api/users', userRoutes);
 app.use('/api/wallet', walletLimiter, walletRoutes);
-app.use('/api/private-transfer', privateTransferRoutes);
+app.use('/api/private-transfer', walletLimiter, privateTransferRoutes);
 
 app.use('/api/swap', swapLimiter, swapRoutes);
 app.use('/api/yield', yieldLimiter, yieldRoutes);
 app.use('/api/lending', yieldLimiter, lendingRoutes);
-app.use('/api/stealth', stealthRoutes);
+app.use('/api/stealth', walletLimiter, stealthRoutes);
 app.use('/api/points', pointsRoutes);
+app.use('/api/stats', statsRoutes);
 app.use('/api/helius', webhookHeliusRoutes);
 
 app.get('/health', (req, res) => {
