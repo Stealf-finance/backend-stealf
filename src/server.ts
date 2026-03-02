@@ -14,12 +14,16 @@ import './config/sentry';
 import { env } from './config/env';
 import { allowedOrigins } from './config/cors';
 import logger, { httpLogger } from './config/logger';
-import { globalLimiter } from './middleware/rateLimiter';
+import { globalLimiter, swapLimiter, yieldLimiter, walletLimiter } from './middleware/rateLimiter';
 import redisClient from './config/redis';
 import userRoutes from './routes/userRoutes'
 import walletRoutes from './routes/walletRoutes';
 import  webhookHeliusRoutes  from './routes/webhookHeliusRoutes'
 import swapRoutes from './routes/swapRoutes';
+import yieldRoutes from './routes/yieldRoutes';
+import lendingRoutes from './routes/lending.routes';
+import pointsRoutes from './routes/points.routes';
+import statsRoutes from './routes/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
 import { getSocketService } from './services/socket/socketService';
@@ -60,10 +64,14 @@ app.get('/.well-known/apple-app-site-association', (req, res) => {
 });
 
 app.use('/api/users', userRoutes);
-app.use('/api/wallet', walletRoutes);
+app.use('/api/wallet', walletLimiter, walletRoutes);
 
-app.use('/api/swap', swapRoutes);
-app.use('/api/helius', webhookHeliusRoutes );
+app.use('/api/swap', swapLimiter, swapRoutes);
+app.use('/api/yield', yieldLimiter, yieldRoutes);
+app.use('/api/lending', yieldLimiter, lendingRoutes);
+app.use('/api/points', pointsRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/helius', webhookHeliusRoutes);
 
 // Enhanced health check with dependency status
 app.get('/health', async (req, res) => {

@@ -8,6 +8,8 @@ import { decodeSessionJwt } from '../middleware/verifyAuth';
 import { createUser } from '../services/auth/createUser';
 import * as magicLinkService from '../services/auth/magicLinkService';
 import { PreAuthService } from '../services/auth/preAuthService';
+import { awardPoints } from '../services/points.service';
+import { StatsService } from '../services/stats.service';
 import logger from '../config/logger';
 
 export class UserController {
@@ -184,6 +186,10 @@ export class UserController {
             if (!mongoUserId || user._id.toString() !== mongoUserId) {
                 return res.status(403).json({ error: 'Access denied' });
             }
+
+            // Award daily login points and track stats (fire-and-forget)
+            awardPoints(user._id.toString(), 'daily bonus').catch(() => {});
+            StatsService.incrementDailyLogins().catch(() => {});
 
             return res.json({
                 success: true,
