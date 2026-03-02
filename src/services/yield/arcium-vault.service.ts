@@ -188,6 +188,10 @@ class ArciumVaultService {
 
       const program = this.getProgram();
 
+      // Start listener BEFORE submitting TX to avoid race condition:
+      // MPC nodes can finalize before awaitComputationFinalization subscribes.
+      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
+
       const sig = await program.methods
         .queueRecordDeposit(
           computationOffset,
@@ -204,9 +208,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      const finalizeSig = await this.awaitFinalizationWithTimeout(
-        computationOffset
-      );
+      const finalizeSig = await finalizationPromise;
 
       return { success: true, txSignature: sig, finalizationSignature: finalizeSig };
     });
@@ -227,6 +229,9 @@ class ArciumVaultService {
       const accounts = this.getArciumAccounts(computationOffset, "verify_withdrawal");
 
       const program = this.getProgram();
+
+      // Start both listeners BEFORE submitting TX to avoid race condition.
+      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
 
       // Listen for the event to get the `sufficient` boolean
       const eventPromise = new Promise<boolean>((resolve) => {
@@ -264,7 +269,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      await this.awaitFinalizationWithTimeout(computationOffset);
+      await finalizationPromise;
       const sufficient = await eventPromise;
 
       return {
@@ -293,6 +298,9 @@ class ArciumVaultService {
       const accounts = this.getArciumAccounts(computationOffset, "proof_of_yield");
 
       const program = this.getProgram();
+
+      // Start both listeners BEFORE submitting TX to avoid race condition.
+      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
 
       const resultPromise = new Promise<boolean>((resolve) => {
         let listenerId: number;
@@ -332,7 +340,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      await this.awaitFinalizationWithTimeout(computationOffset);
+      await finalizationPromise;
       const exceedsThreshold = await resultPromise;
 
       return {
@@ -361,6 +369,9 @@ class ArciumVaultService {
 
       const program = this.getProgram();
 
+      // Start listener BEFORE submitting TX to avoid race condition.
+      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
+
       const sig = await program.methods
         .queueEncryptedTotalUpdate(
           computationOffset,
@@ -378,9 +389,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      const finalizeSig = await this.awaitFinalizationWithTimeout(
-        computationOffset
-      );
+      const finalizeSig = await finalizationPromise;
 
       return { success: true, txSignature: sig, finalizationSignature: finalizeSig };
     });
@@ -416,6 +425,9 @@ class ArciumVaultService {
       const computationOffset = new BN(randomBytes(8), "hex");
       const accounts = this.getArciumAccounts(computationOffset, "init_encrypted_state_v3");
 
+      // Start listener BEFORE submitting TX to avoid race condition.
+      const initFinalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
+
       await program.methods
         .queueInitEncryptedState(
           computationOffset,
@@ -432,7 +444,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      await this.awaitFinalizationWithTimeout(computationOffset);
+      await initFinalizationPromise;
     }
 
     return userSharePDA;
