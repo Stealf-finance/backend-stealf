@@ -13,6 +13,7 @@ export class SolPriceService {
     private static CACHE_DURATION = 300; // 5 minutes
     private static CACHE_KEY = 'sol_price';
     private static pendingFetch: Promise<number> | null = null;
+    private static lastKnownPrice: number = 140; // in-memory fallback
 
     /**
      * retrive solana token price
@@ -43,8 +44,12 @@ export class SolPriceService {
                 throw new Error('COINGECKO_URL not defined in environment variables');
             }
 
-            const response = await axios.get<CoinGeckoResponse>(COINGECKO_URL);
+            const response = await axios.get<CoinGeckoResponse>(COINGECKO_URL, {
+                headers: { 'Accept': 'application/json' },
+                timeout: 5000,
+            });
             const price = response.data.solana.usd;
+            this.lastKnownPrice = price;
 
             await redisClient.set(
                 this.CACHE_KEY,
@@ -54,15 +59,17 @@ export class SolPriceService {
             );
 
             return price;
-        } catch (error) {
-            logger.error({ err: error }, 'Error fetching SOL price');
-
-            const fallbackPrice = await redisClient.get(this.CACHE_KEY);
-            if (fallbackPrice) {
-                return parseFloat(fallbackPrice);
+        } catch (error: any) {
+            const is429 = error?.response?.status === 429;
+            if (!is429) {
+                logger.error({ err: error }, 'Error fetching SOL price');
             }
 
-            throw new Error('Failed to fetch solana price');
+            const fallbackPrice = await redisClient.get(this.CACHE_KEY);
+            if (fallbackPrice) return parseFloat(fallbackPrice);
+
+            // Last resort: in-memory price from previous successful fetch
+            return this.lastKnownPrice;
         }
     }
 

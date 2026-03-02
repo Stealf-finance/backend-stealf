@@ -68,6 +68,19 @@ export const walletLimiter = rateLimit({
     }
 });
 
+// Yield rate limiter: 20 requests per minute per IP
+export const yieldLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
+        });
+    }
+});
+
 // Withdraw rate limiter: 5 requests per 15 minutes per IP
 export const withdrawLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

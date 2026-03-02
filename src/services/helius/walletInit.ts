@@ -131,7 +131,11 @@ export const solanaService = {
             }
 
             logger.debug({ address }, 'WalletInit: fetching transactions from Helius API');
-            const baseUrl = `https://api-mainnet.helius-rpc.com/v0/addresses/${address}/transactions/`;
+            const isDevnet = process.env.SOLANA_RPC_URL?.includes('devnet');
+            const heliusBase = isDevnet
+                ? 'https://api-devnet.helius-rpc.com'
+                : 'https://api-mainnet.helius-rpc.com';
+            const baseUrl = `${heliusBase}/v0/addresses/${address}/transactions/`;
 
             let url = baseUrl;
             let lastSignature: string | null = null;
