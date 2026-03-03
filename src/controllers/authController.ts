@@ -16,7 +16,7 @@ export class UserController {
 
     /**
      * POST /api/users/check-availability
-     * Check if email/pseudo are available and initiate magic link flow
+     * Check if email/pseudo are available, return preAuthToken if available
      * SECURITY: Uses constant-time response to prevent timing-based enumeration
      */
     static async checkAvailability(req: Request, res: Response, next: NextFunction) {
@@ -27,7 +27,6 @@ export class UserController {
             const { email, pseudo} = checkAvailabilitySchema.parse(req.body);
             const unavailable: number[] = [];
 
-            // Always perform both lookups to prevent timing-based enumeration
             const [emailExists, pseudoExists] = await Promise.all([
                 email ? User.findOne({ email }).lean() : Promise.resolve(null),
                 pseudo ? User.findOne({ pseudo }).lean() : Promise.resolve(null),
@@ -43,22 +42,12 @@ export class UserController {
             let responseData: any;
 
             if (unavailable.length === 0 && email && pseudo) {
-                try {
-                    const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
-                    await magicLinkService.sendMagicLink(email, pseudo);
-
-                    responseData = {
-                        canProceed: true,
-                        unavailable: [],
-                        preAuthToken,
-                    };
-                } catch (emailError) {
-                    logger.error({ err: emailError }, 'Failed to send magic link');
-                    responseData = {
-                        canProceed: false,
-                        unavailable: [],
-                    };
-                }
+                const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
+                responseData = {
+                    canProceed: true,
+                    unavailable: [],
+                    preAuthToken,
+                };
             } else {
                 responseData = {
                     canProceed: false,
@@ -66,7 +55,6 @@ export class UserController {
                 };
             }
 
-            // Enforce minimum response time to normalize timing
             const elapsed = Date.now() - startTime;
             if (elapsed < MIN_RESPONSE_TIME) {
                 await new Promise(resolve => setTimeout(resolve, MIN_RESPONSE_TIME - elapsed));
@@ -81,7 +69,6 @@ export class UserController {
                     message: err.message
                 }));
 
-                // Still enforce minimum time on errors
                 const elapsed = Date.now() - startTime;
                 if (elapsed < MIN_RESPONSE_TIME) {
                     await new Promise(resolve => setTimeout(resolve, MIN_RESPONSE_TIME - elapsed));
@@ -93,6 +80,38 @@ export class UserController {
                     errors: errors
                 });
             }
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/users/send-magic-link
+     * Send magic link email — requires valid preAuthToken
+     * Authorization: Bearer <preAuthToken>
+     */
+    static async sendMagicLink(req: Request, res: Response, next: NextFunction) {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Missing pre-auth token' });
+            }
+
+            const preAuthToken = authHeader.substring(7);
+            const preAuthStatus = await PreAuthService.verifyPreAuthToken(preAuthToken);
+
+            if (!preAuthStatus) {
+                return res.status(401).json({ error: 'Invalid or expired pre-auth token' });
+            }
+
+            if (preAuthStatus.verified) {
+                return res.status(200).json({ success: true, alreadyVerified: true });
+            }
+
+            await magicLinkService.sendMagicLink(preAuthStatus.email, preAuthStatus.pseudo);
+
+            return res.status(200).json({ success: true });
+        } catch (error) {
+            logger.error({ err: error }, 'Failed to send magic link');
             next(error);
         }
     }
@@ -144,7 +163,6 @@ export class UserController {
                         email: user.email,
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
-                        stealf_wallet: user.stealf_wallet,
                         status: user.status,
                     },
                 },
@@ -199,7 +217,6 @@ export class UserController {
                         email: user.email,
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
-                        stealf_wallet: user.stealf_wallet,
                         status: user.status,
                     }
                 },

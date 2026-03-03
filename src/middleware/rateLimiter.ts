@@ -1,10 +1,14 @@
 import rateLimit from "express-rate-limit";
 import type { Request, Response } from "express";
 
+const isDev = process.env.NODE_ENV !== 'production';
+const skipInDev = () => isDev;
+
 // Existing limiter for /check-availability endpoint
 export const availabilityCheckLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 5,
+    skip: skipInDev,
     standardHeaders: false,
     skipSuccessfulRequests: false,
 
@@ -20,6 +24,7 @@ export const availabilityCheckLimiter = rateLimit({
 export const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
+    skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {
@@ -33,6 +38,7 @@ export const globalLimiter = rateLimit({
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
+    skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {
@@ -46,6 +52,7 @@ export const authLimiter = rateLimit({
 export const swapLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 20,
+    skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {
@@ -59,6 +66,7 @@ export const swapLimiter = rateLimit({
 export const walletLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
+    skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {
@@ -72,6 +80,7 @@ export const walletLimiter = rateLimit({
 export const yieldLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 20,
+    skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {
@@ -85,6 +94,7 @@ export const yieldLimiter = rateLimit({
 export const withdrawLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,
+    skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {

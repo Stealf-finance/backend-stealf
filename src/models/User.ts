@@ -4,7 +4,6 @@ export interface IUser extends Document{
     email: string;
     pseudo: string;
     cash_wallet: string;
-    stealf_wallet: string;
     turnkey_subOrgId: string;
     authMethod: 'passkey' | 'wallet';
     status: 'pending' | 'active';
@@ -16,18 +15,7 @@ export interface IUser extends Document{
     autoSweepInterval: 'daily' | 'weekly';
     autoSweepMinYield: number; // Minimum yield in SOL before sweeping
     autoSweepVaultType: 'sol_jito' | 'sol_marinade';
-    // Stealth addresses wealth wallet (EIP-5564 adapté Solana) — Requirements 1.3, 1.4
-    stealthEnabled: boolean;
-    stealthSpendingPublic?: string;       // base58 32 bytes — clé publique ed25519
-    stealthViewingPublic?: string;        // base58 32 bytes — clé publique X25519
-    stealthViewingPrivateEnc?: string;    // AES-256-GCM chiffrée (format iv:tag:ciphertext)
-    lastStealthScanAt?: Date;
-    // Stealth addresses cash wallet (EIP-5564 adapté Solana) — Requirements 2.2, 4.1
-    cashStealthEnabled: boolean;
-    cashStealthSpendingPublic?: string;   // base58 32 bytes — clé publique ed25519
-    cashStealthViewingPublic?: string;    // base58 32 bytes — clé publique X25519
-    cashStealthViewingPrivateEnc?: string;// AES-256-GCM chiffrée (format iv:tag:ciphertext)
-    // Points system
+
     points: number;
     lastDailyBonusAt?: Date;
 }
@@ -50,11 +38,6 @@ const userSchema = new Schema<IUser>({
         type: String,
         required: [true, 'Cash wallet is required'],
         unique: true,
-        index: true,
-    },
-    stealf_wallet:{
-        type: String,
-        required: [true, 'Stealf wallet is required'],
         index: true,
     },
     authMethod: {
@@ -93,37 +76,6 @@ const userSchema = new Schema<IUser>({
         type: String,
         enum: ['sol_jito', 'sol_marinade'],
         default: 'sol_jito',
-    },
-    // Stealth addresses
-    stealthEnabled: {
-        type: Boolean,
-        default: false,
-    },
-    stealthSpendingPublic: {
-        type: String,
-    },
-    stealthViewingPublic: {
-        type: String,
-    },
-    stealthViewingPrivateEnc: {
-        type: String,
-    },
-    lastStealthScanAt: {
-        type: Date,
-    },
-    // Stealth cash wallet
-    cashStealthEnabled: {
-        type: Boolean,
-        default: false,
-    },
-    cashStealthSpendingPublic: {
-        type: String,
-    },
-    cashStealthViewingPublic: {
-        type: String,
-    },
-    cashStealthViewingPrivateEnc: {
-        type: String,
     },
     points: {
         type: Number,

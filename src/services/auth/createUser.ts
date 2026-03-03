@@ -12,7 +12,6 @@ export async function createUser(email: string, pseudo: string, cash_wallet: str
         email,
         pseudo,
         cash_wallet,
-        stealf_wallet,
         turnkey_subOrgId,
         status: 'active',
         lastLoginAt: new Date(),

@@ -173,7 +173,7 @@ export async function parseTransactions(
             tokenMint: tx.tokenMint,
             tokenSymbol: tx.tokenSymbol,
             tokenDecimals: tx.tokenDecimals,
-            signatureURL: getExplorerUrl(tx.signature, "mainnet-beta"),
+            signatureURL: getExplorerUrl(tx.signature, process.env.SOLANA_RPC_URL?.includes('devnet') ? 'devnet' : 'mainnet-beta'),
             walletAddress: walletAddress,
             dateFormatted: formatDate(tx.date),
             status: tx.status || 'unknown',

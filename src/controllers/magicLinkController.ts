@@ -11,17 +11,20 @@ export class MagicLinkController{
      */
     static async checkVerification(req: Request, res: Response, next: NextFunction) {
         try {
-            const authHeader = req.headers.authorization;
             let token: string | undefined;
 
+            // Accept token from Authorization header or query param
+            const authHeader = req.headers.authorization;
             if (authHeader && authHeader.startsWith('Bearer ')) {
                 token = authHeader.substring(7);
+            } else if (req.query.token && typeof req.query.token === 'string') {
+                token = req.query.token;
             }
 
             if (!token) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Pre-auth token is required in Authorization header'
+                    error: 'Pre-auth token is required'
                 });
             }
 

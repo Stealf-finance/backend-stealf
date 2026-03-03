@@ -5,7 +5,13 @@
  * allowed.  In development common localhost origins are added automatically.
  */
 
-function getAllowedOrigins(): string[] {
+const isDev = process.env.NODE_ENV !== 'production';
+
+function getAllowedOrigins(): string[] | true {
+  // Dev: accept all origins (React Native on physical devices sends no Origin
+  // header or connects from local network IPs like 192.168.x.x)
+  if (isDev) return true;
+
   const origins: string[] = [];
 
   if (process.env.FRONTEND_URL) {
@@ -14,22 +20,6 @@ function getAllowedOrigins(): string[] {
       .map((o) => o.trim())
       .filter(Boolean);
     origins.push(...parsed);
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    const devOrigins = [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:8081',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:8081',
-    ];
-    for (const devOrigin of devOrigins) {
-      if (!origins.includes(devOrigin)) {
-        origins.push(devOrigin);
-      }
-    }
   }
 
   return origins;

@@ -5,7 +5,10 @@ import logger from '../../config/logger';
 
 class HeliusWebhookManager {
     private helius;
-    private webhookConfigId = 'helius-solana-mainnet';
+    private isDevnet = process.env.SOLANA_RPC_URL?.includes('devnet') ?? false;
+    private webhookConfigId = process.env.SOLANA_RPC_URL?.includes('devnet')
+        ? 'helius-solana-devnet'
+        : 'helius-solana-mainnet';
 
     constructor() {
         this.helius = createHelius({
@@ -46,7 +49,7 @@ class HeliusWebhookManager {
             config = await WebhookHelius.create({
                 _id: this.webhookConfigId,
                 provider: 'helius',
-                network: 'solana-mainnet',
+                network: this.isDevnet ? 'solana-devnet' : 'solana-mainnet',
                 webhookId: webhook.webhookID,
                 url: fullWebhookUrl,
                 accountCount: wallets.length,
