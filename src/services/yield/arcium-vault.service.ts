@@ -35,7 +35,12 @@ const CLUSTER_OFFSET = 456; // v0.8.x devnet
 const ARCIUM_VAULT_ID = 1; // Arcium vault uses vault_id=1
 
 const MPC_TIMEOUT_MS = 60_000; // 60 seconds
-const MAX_RETRIES = 1;
+const MAX_RETRIES = 3;
+
+// Initial wait before first poll (give MPC nodes time to start processing)
+const POLL_INITIAL_DELAY_MS = 4_000;
+// Interval between polls
+const POLL_INTERVAL_MS = 2_000;
 
 // ========== TYPES ==========
 
@@ -53,10 +58,16 @@ interface EncryptedInput {
   nonce: BN;
 }
 
+interface FinalizationResult {
+  finalizeSig: string;
+  logs: string[];
+}
+
 export interface ArciumVaultHelpers {
   encryptAmount: (amount: bigint) => EncryptedInput;
   getArciumAccounts: (computationOffset: BN, compDefName: string) => ReturnType<ArciumVaultService["getArciumAccounts"]>;
-  awaitFinalizationWithTimeout: (computationOffset: BN) => Promise<string>;
+  awaitFinalizationWithTimeout: (computationOffset: BN, queueTxSig: string) => Promise<FinalizationResult>;
+  parseEventFromLogs: <T>(logs: string[], eventName: string) => T | null;
   executeMpcWithRetry: <T>(
     operationName: string,
     operation: (computationOffset: BN) => Promise<MpcResult<T>>
@@ -80,7 +91,15 @@ class ArciumVaultService {
   constructor() {
     const rpcUrl = process.env.SOLANA_RPC_URL;
     if (!rpcUrl) throw new Error("SOLANA_RPC_URL not configured");
-    this.connection = new Connection(rpcUrl, "confirmed");
+
+    // Explicitly derive WebSocket endpoint — auto-derivation can fail with some providers (Helius, etc.)
+    const wsEndpoint = rpcUrl.replace(/^https?:\/\//, (m) =>
+      m === "https://" ? "wss://" : "ws://"
+    );
+    this.connection = new Connection(rpcUrl, {
+      commitment: "confirmed",
+      wsEndpoint,
+    });
 
     const authorityKey = process.env.POOL_AUTHORITY_PRIVATE_KEY;
     if (!authorityKey) throw new Error("POOL_AUTHORITY_PRIVATE_KEY not configured");
@@ -185,12 +204,7 @@ class ArciumVaultService {
       const encrypted = this.encryptAmount(amountLamports);
       const userIdHash = ArciumVaultService.hashUserId(userId);
       const accounts = this.getArciumAccounts(computationOffset, "record_deposit");
-
       const program = this.getProgram();
-
-      // Start listener BEFORE submitting TX to avoid race condition:
-      // MPC nodes can finalize before awaitComputationFinalization subscribes.
-      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
 
       const sig = await program.methods
         .queueRecordDeposit(
@@ -206,9 +220,9 @@ class ArciumVaultService {
           userVaultShare: this.getUserSharePDA(userIdHash),
         })
         .signers([this.authority])
-        .rpc({ skipPreflight: true, commitment: "confirmed" });
+        .rpc({ skipPreflight: false, commitment: "confirmed" });
 
-      const finalizeSig = await finalizationPromise;
+      const { finalizeSig } = await this.awaitFinalizationWithTimeout(computationOffset, sig);
 
       return { success: true, txSignature: sig, finalizationSignature: finalizeSig };
     });
@@ -227,31 +241,7 @@ class ArciumVaultService {
       const encrypted = this.encryptAmount(amountLamports);
       const userIdHash = ArciumVaultService.hashUserId(userId);
       const accounts = this.getArciumAccounts(computationOffset, "verify_withdrawal");
-
       const program = this.getProgram();
-
-      // Start both listeners BEFORE submitting TX to avoid race condition.
-      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
-
-      // Listen for the event to get the `sufficient` boolean
-      const eventPromise = new Promise<boolean>((resolve) => {
-        let listenerId: number;
-        let cleaned = false;
-        const cleanup = () => {
-          if (cleaned) return;
-          cleaned = true;
-          try { program.removeEventListener(listenerId); } catch (_e) {}
-        };
-        listenerId = program.addEventListener(
-          "withdrawalVerified",
-          (event: any) => {
-            cleanup();
-            resolve(event.sufficient);
-          }
-        );
-        // Timeout fallback — also removes listener to avoid resource leak
-        setTimeout(() => { cleanup(); resolve(false); }, MPC_TIMEOUT_MS);
-      });
 
       const sig = await program.methods
         .queueVerifyWithdrawal(
@@ -269,13 +259,16 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      await finalizationPromise;
-      const sufficient = await eventPromise;
+      const { finalizeSig, logs } = await this.awaitFinalizationWithTimeout(computationOffset, sig);
+
+      const event = this.parseEventFromLogs<{ sufficient: boolean }>(logs, "withdrawalVerified");
+      const sufficient = event?.sufficient ?? false;
 
       return {
         success: true,
         data: { sufficient },
         txSignature: sig,
+        finalizationSignature: finalizeSig,
       };
     });
   }
@@ -296,30 +289,7 @@ class ArciumVaultService {
       const encDeposited = this.encryptAmount(depositedLamports);
       const userIdHash = ArciumVaultService.hashUserId(userId);
       const accounts = this.getArciumAccounts(computationOffset, "proof_of_yield");
-
       const program = this.getProgram();
-
-      // Start both listeners BEFORE submitting TX to avoid race condition.
-      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
-
-      const resultPromise = new Promise<boolean>((resolve) => {
-        let listenerId: number;
-        let cleaned = false;
-        const cleanup = () => {
-          if (cleaned) return;
-          cleaned = true;
-          try { program.removeEventListener(listenerId); } catch (_e) {}
-        };
-        listenerId = program.addEventListener(
-          "yieldProofResult",
-          (event: any) => {
-            cleanup();
-            resolve(event.exceedsThreshold);
-          }
-        );
-        // Timeout fallback — also removes listener to avoid resource leak
-        setTimeout(() => { cleanup(); resolve(false); }, MPC_TIMEOUT_MS);
-      });
 
       const sig = await program.methods
         .queueProofOfYield(
@@ -340,13 +310,16 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      await finalizationPromise;
-      const exceedsThreshold = await resultPromise;
+      const { finalizeSig, logs } = await this.awaitFinalizationWithTimeout(computationOffset, sig);
+
+      const event = this.parseEventFromLogs<{ exceedsThreshold: boolean }>(logs, "yieldProofResult");
+      const exceedsThreshold = event?.exceedsThreshold ?? false;
 
       return {
         success: true,
         data: { exceedsThreshold },
         txSignature: sig,
+        finalizationSignature: finalizeSig,
       };
     });
   }
@@ -366,11 +339,7 @@ class ArciumVaultService {
         computationOffset,
         "encrypted_total_update"
       );
-
       const program = this.getProgram();
-
-      // Start listener BEFORE submitting TX to avoid race condition.
-      const finalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
 
       const sig = await program.methods
         .queueEncryptedTotalUpdate(
@@ -389,7 +358,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      const finalizeSig = await finalizationPromise;
+      const { finalizeSig } = await this.awaitFinalizationWithTimeout(computationOffset, sig);
 
       return { success: true, txSignature: sig, finalizationSignature: finalizeSig };
     });
@@ -425,10 +394,7 @@ class ArciumVaultService {
       const computationOffset = new BN(randomBytes(8), "hex");
       const accounts = this.getArciumAccounts(computationOffset, "init_encrypted_state_v3");
 
-      // Start listener BEFORE submitting TX to avoid race condition.
-      const initFinalizationPromise = this.awaitFinalizationWithTimeout(computationOffset);
-
-      await program.methods
+      const initSig = await program.methods
         .queueInitEncryptedState(
           computationOffset,
           0, // target_type = 0 (UserVaultShare)
@@ -444,7 +410,7 @@ class ArciumVaultService {
         .signers([this.authority])
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-      await initFinalizationPromise;
+      await this.awaitFinalizationWithTimeout(computationOffset, initSig);
     }
 
     return userSharePDA;
@@ -457,8 +423,10 @@ class ArciumVaultService {
       encryptAmount: (amount: bigint) => this.encryptAmount(amount),
       getArciumAccounts: (computationOffset: BN, compDefName: string) =>
         this.getArciumAccounts(computationOffset, compDefName),
-      awaitFinalizationWithTimeout: (computationOffset: BN) =>
-        this.awaitFinalizationWithTimeout(computationOffset),
+      awaitFinalizationWithTimeout: (computationOffset: BN, queueTxSig: string) =>
+        this.awaitFinalizationWithTimeout(computationOffset, queueTxSig),
+      parseEventFromLogs: <T>(logs: string[], eventName: string) =>
+        this.parseEventFromLogs<T>(logs, eventName),
       executeMpcWithRetry: <T>(
         operationName: string,
         operation: (computationOffset: BN) => Promise<MpcResult<T>>
@@ -502,30 +470,88 @@ class ArciumVaultService {
     return this._program;
   }
 
-  private async awaitFinalizationWithTimeout(
-    computationOffset: BN
-  ): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(
-        () => reject(new Error("MPC finalization timeout")),
-        MPC_TIMEOUT_MS
-      );
+  /**
+   * Parse an Anchor event from Solana transaction log messages.
+   * Events are encoded as "Program data: <base64>" log lines.
+   */
+  private parseEventFromLogs<T>(logs: string[], eventName: string): T | null {
+    const program = this.getProgram();
+    for (const log of logs) {
+      if (!log.startsWith("Program data: ")) continue;
+      const base64Data = log.slice("Program data: ".length);
+      try {
+        const decoded = (program.coder as any).events.decode(base64Data);
+        if (decoded?.name === eventName) {
+          return decoded.data as T;
+        }
+      } catch {
+        // Not a valid event for our IDL — skip
+      }
+    }
+    return null;
+  }
 
-      awaitComputationFinalization(
-        this.getProvider(),
-        computationOffset,
-        ARCIUM_VAULT_PROGRAM_ID,
-        "confirmed"
-      )
-        .then((sig) => {
-          clearTimeout(timeout);
-          resolve(sig);
-        })
-        .catch((err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-    });
+  /**
+   * Poll the computation account for the finalization TX instead of relying on WebSocket.
+   *
+   * After the queue TX, Arcium MPC nodes process the computation and submit a finalization TX
+   * that references the same computationAccAddress. We detect it by polling
+   * getSignaturesForAddress() until a second signature appears (different from queueTxSig).
+   *
+   * We then fetch the finalization TX and return its log messages for event parsing.
+   */
+  private async awaitFinalizationWithTimeout(
+    computationOffset: BN,
+    queueTxSig: string
+  ): Promise<FinalizationResult> {
+    const computationAccAddress = getComputationAccAddress(CLUSTER_OFFSET, computationOffset);
+    const deadline = Date.now() + MPC_TIMEOUT_MS;
+
+    console.log(
+      `[ArciumVault][Poll] Starting — queue TX: https://explorer.solana.com/tx/${queueTxSig}?cluster=devnet` +
+      `\n  ↳ computation account: https://explorer.solana.com/address/${computationAccAddress.toBase58()}?cluster=devnet`
+    );
+
+    // Give MPC nodes time to start processing before first poll
+    await new Promise((r) => setTimeout(r, POLL_INITIAL_DELAY_MS));
+
+    let pollCount = 0;
+    while (Date.now() < deadline) {
+      try {
+        const sigs = await this.connection.getSignaturesForAddress(
+          computationAccAddress,
+          { limit: 10 },
+          "confirmed"
+        );
+
+        pollCount++;
+        console.log(`[ArciumVault][Poll] #${pollCount} — ${sigs.length} sig(s) on computation account`);
+        for (const s of sigs) {
+          console.log(`  sig: ${s.signature} | err: ${s.err ? JSON.stringify(s.err) : "null"}`);
+        }
+
+        // Finalization TX is a successful TX other than the queue TX
+        const finalization = sigs.find(
+          (s) => s.signature !== queueTxSig && s.err === null
+        );
+
+        if (finalization) {
+          const tx = await this.connection.getTransaction(finalization.signature, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+          });
+          const logs = tx?.meta?.logMessages ?? [];
+          console.log(`[ArciumVault] Finalization detected (polling): ${finalization.signature}`);
+          return { finalizeSig: finalization.signature, logs };
+        }
+      } catch (err: any) {
+        console.warn(`[ArciumVault][Poll] Error:`, err.message);
+      }
+
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+
+    throw new Error("MPC finalization timeout");
   }
 
   private async executeMpcWithRetry<T>(
@@ -556,8 +582,9 @@ class ArciumVaultService {
           };
         }
 
-        // Wait before retry
-        await new Promise((r) => setTimeout(r, 2000));
+        // Exponential backoff: 1s, 2s, 4s (cap 8s)
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        await new Promise((r) => setTimeout(r, delayMs));
       }
     }
 

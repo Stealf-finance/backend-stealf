@@ -239,19 +239,21 @@ export class YieldController {
             console.error("[Arcium] updateEncryptedTotal (withdraw) failed:", err.message);
           });
 
-          // Snapshot: record encrypted balance state after successful private withdraw
+          // Snapshot: record encrypted balance state after successful private withdraw.
+          // Uses processingShare (already in memory) instead of re-querying MongoDB,
+          // since the share status is now "withdrawn" and findOne({ status: "active" })
+          // would return null.
           if (arciumService) {
             (async () => {
               try {
-                const share = await VaultShare.findOne({ userId, vaultType, status: "active" });
-                const currentIndex = share?.snapshotIndex ?? 0;
+                const currentIndex = processingShare.snapshotIndex ?? 0;
                 const newIndex = BigInt(currentIndex + 1);
                 const vaultTypeNum = vaultType === "sol_jito" ? 0 : 1;
                 const enhService = getYieldMpcEnhancementsService();
                 const snapResult = await enhService.takeBalanceSnapshot(userId, vaultTypeNum, newIndex);
-                if (snapResult.success && share) {
+                if (snapResult.success) {
                   const usedIndex = snapResult.data?.usedIndex ?? currentIndex + 1;
-                  await VaultShare.findByIdAndUpdate(share._id, { snapshotIndex: usedIndex });
+                  await VaultShare.findByIdAndUpdate(processingShare._id, { snapshotIndex: usedIndex });
                 }
               } catch (err: any) {
                 console.error("[Arcium] takeBalanceSnapshot (withdraw) failed:", err.message);
