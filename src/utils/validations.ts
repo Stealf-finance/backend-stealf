@@ -65,7 +65,8 @@ export const authUserSchema = z.object({
         .length(44, 'cash_wallet must be 44 characters'),
     stealf_wallet: z.string()
         .regex(solanaAddressRegex, 'Invalid stealf_wallet Solana address format')
-        .length(44, 'stealf_wallet must be 44 characters'),
+        .length(44, 'stealf_wallet must be 44 characters')
+        .optional(),
     coldWallet: z.boolean().optional().default(false),
 });
 

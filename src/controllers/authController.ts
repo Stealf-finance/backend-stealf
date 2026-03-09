@@ -8,7 +8,6 @@ import { decodeSessionJwt } from '../middleware/verifyAuth';
 import { createUser } from '../services/auth/createUser';
 import * as magicLinkService from '../services/auth/magicLinkService';
 import { PreAuthService } from '../services/auth/preAuthService';
-import { awardPoints } from '../services/points.service';
 import { StatsService } from '../services/stats.service';
 import logger from '../config/logger';
 
@@ -42,12 +41,22 @@ export class UserController {
             let responseData: any;
 
             if (unavailable.length === 0 && email && pseudo) {
-                const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
-                responseData = {
-                    canProceed: true,
-                    unavailable: [],
-                    preAuthToken,
-                };
+                try {
+                    const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
+                    await magicLinkService.sendMagicLink(email, pseudo);
+
+                    responseData = {
+                        canProceed: true,
+                        unavailable: [],
+                        preAuthToken,
+                    };
+                } catch (emailError) {
+                    logger.error({ err: emailError }, 'Failed to send magic link');
+                    responseData = {
+                        canProceed: false,
+                        unavailable: [],
+                    };
+                }
             } else {
                 responseData = {
                     canProceed: false,
@@ -122,9 +131,8 @@ export class UserController {
      */
     static async authUser(req: Request, res: Response, next: NextFunction){
         try {
-            // SECURITY: Validate input with Zod schema
             const validatedData = authUserSchema.parse(req.body);
-            const { email, pseudo, cash_wallet, stealf_wallet, coldWallet } = validatedData;
+            const { email, pseudo, cash_wallet, stealf_wallet } = validatedData;
 
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')){
@@ -138,7 +146,6 @@ export class UserController {
                 return res.status(401).json({ error: 'Invalid JWT signature' });
             }
 
-            // SECURITY: Verify email was confirmed via magic link before creating account
             const preAuthToken = req.headers['x-preauth-token'] as string;
             if (preAuthToken) {
                 const preAuthStatus = await PreAuthService.verifyPreAuthToken(preAuthToken);
@@ -153,7 +160,7 @@ export class UserController {
             const decoded = decodeSessionJwt(sessionJWT);
             const turnkey_subOrgId = decoded.organizationId;
 
-            const user = await createUser(email, pseudo, cash_wallet, stealf_wallet, turnkey_subOrgId);
+            const user = await createUser(email, pseudo, cash_wallet, turnkey_subOrgId, stealf_wallet);
 
             return res.status(201).json({
                 success: true,
@@ -163,6 +170,7 @@ export class UserController {
                         email: user.email,
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
+                        points: user.points,
                         status: user.status,
                     },
                 },
@@ -200,13 +208,10 @@ export class UserController {
                 return res.status(404).json({ error: 'User not found '});
             }
 
-            // SECURITY: Only allow users to access their own profile
             if (!mongoUserId || user._id.toString() !== mongoUserId) {
                 return res.status(403).json({ error: 'Access denied' });
             }
 
-            // Award daily login points and track stats (fire-and-forget)
-            awardPoints(user._id.toString(), 'daily bonus').catch(() => {});
             StatsService.incrementDailyLogins().catch(() => {});
 
             return res.json({
@@ -217,10 +222,40 @@ export class UserController {
                         email: user.email,
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
+                        points: user.points,
                         status: user.status,
                     }
                 },
             });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * DELETE /api/users/account
+     * Delete the authenticated user's account and associated data.
+     */
+    static async deleteAccount(req: Request, res: Response, next: NextFunction) {
+        try {
+            const userId = (req as any).user?.mongoUserId;
+            if (!userId) {
+                return res.status(401).json({ error: 'Authentication required' });
+            }
+
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            const { VaultShare } = await import('../models/VaultShare');
+            await VaultShare.deleteMany({ userId });
+
+            await User.findByIdAndDelete(userId);
+
+            logger.info({ userId, email: user.email }, 'Account deleted');
+
+            return res.status(200).json({ success: true });
         } catch (error) {
             next(error);
         }

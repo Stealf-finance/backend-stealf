@@ -108,7 +108,7 @@ class AutoSweepService {
    */
   private async sweepForUser(user: IUser): Promise<SweepResult> {
     const userId = user._id.toString();
-    const vaultType: VaultType = user.autoSweepVaultType || "sol_jito";
+    const vaultType: VaultType = "sol_jito";
     const minYield = user.autoSweepMinYield || 0.01;
 
     const yieldService = getYieldService();

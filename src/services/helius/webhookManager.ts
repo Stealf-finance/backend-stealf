@@ -34,7 +34,6 @@ class HeliusWebhookManager {
             const wallets: string[] = [];
             users.forEach(user => {
                 if (user.cash_wallet) wallets.push(user.cash_wallet);
-                if (user.stealf_wallet) wallets.push(user.stealf_wallet);
             });
 
             const webhook = await this.helius.webhooks.create({
@@ -65,7 +64,7 @@ class HeliusWebhookManager {
         }
     }
 
-    async addUserWallets(cash_wallet: string, stealf_wallet: string) {
+    async addUserWallets(cash_wallet: string, stealf_wallet?: string) {
         try {
             const config = await WebhookHelius.findById(this.webhookConfigId);
 

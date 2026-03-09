@@ -36,7 +36,7 @@ function decrypt(data: string): number {
 
 // --- Types ---
 
-export type VaultType = "sol_jito" | "sol_marinade" | "usdc_kamino";
+export type VaultType = "sol_jito";
 export type VaultShareStatus = "active" | "withdrawn" | "pending";
 
 export interface IVaultShare extends Document {
@@ -72,7 +72,7 @@ const vaultShareSchema = new Schema<IVaultShare>(
     },
     vaultType: {
       type: String,
-      enum: ["sol_jito", "sol_marinade", "usdc_kamino"],
+      enum: ["sol_jito"],
       required: [true, "vaultType is required"],
     },
     // Encrypted fields stored as strings

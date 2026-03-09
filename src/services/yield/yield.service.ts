@@ -1,16 +1,14 @@
 /**
- * YieldService — public API facade for SOL yield operations.
+ * YieldService — public API facade for SOL yield operations (Jito only, private mode).
  *
  * Delegates to focused sub-modules:
  *   yield.config       → constants, helpers, PDAs
- *   sol-staking        → Jito / Marinade staking
+ *   sol-staking        → Jito staking
  *   sol-deposit        → deposit flow
  *   sol-withdraw       → withdrawal flow
  *   yield-rates        → exchange rates, APY, balance, dashboard
  *   private-sol        → authority-indirection private flows
  */
-import { VaultType } from "../../models/VaultShare";
-
 import {
   buildDepositTransaction,
   confirmDeposit,

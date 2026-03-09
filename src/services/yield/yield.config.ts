@@ -23,12 +23,6 @@ export const JITO_STAKE_POOL = new PublicKey(
 export const JITOSOL_MINT = new PublicKey(
   process.env.JITOSOL_MINT || "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn"
 );
-export const MSOL_MINT = new PublicKey(
-  process.env.MSOL_MINT || "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
-);
-export const MARINADE_PROGRAM = new PublicKey(
-  process.env.MARINADE_PROGRAM || "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD"
-);
 
 export const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 
@@ -84,8 +78,8 @@ export function getSolVaultPda(vaultState: PublicKey): [PublicKey, number] {
   );
 }
 
-export function getLstMint(vaultType: VaultType): PublicKey {
-  return vaultType === "sol_jito" ? JITOSOL_MINT : MSOL_MINT;
+export function getLstMint(_vaultType: VaultType): PublicKey {
+  return JITOSOL_MINT;
 }
 
 // --- Instruction building ---

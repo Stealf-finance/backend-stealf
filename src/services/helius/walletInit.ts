@@ -135,7 +135,7 @@ export const solanaService = {
             const heliusBase = isDevnet
                 ? 'https://api-devnet.helius-rpc.com'
                 : 'https://api-mainnet.helius-rpc.com';
-            const baseUrl = `${heliusBase}/v0/addresses/${address}/transactions/`;
+            const baseUrl = `${heliusBase}/v0/addresses/${address}/transactions/?api-key=${heliusApiKey}`;
 
             let url = baseUrl;
             let lastSignature: string | null = null;
@@ -143,12 +143,10 @@ export const solanaService = {
 
             while (allTransactions.length < 100) {
                 if (lastSignature) {
-                    url = baseUrl + `?before=${lastSignature}`;
+                    url = baseUrl + `&before=${lastSignature}`;
                 }
 
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${heliusApiKey}` },
-                });
+                const response = await fetch(url);
 
                 if (!response.ok) {
                     const errorText = await response.text();

@@ -14,6 +14,7 @@ router.get('/check-verification', authLimiter, MagicLinkController.checkVerifica
 router.get('/verify-magic-link', authLimiter, MagicLinkController.verifyMagicLink);
 
 router.get('/sol-price', verifyAuth, SolPriceController.getSolPrice);
+router.delete('/account', verifyAuth, UserController.deleteAccount);
 router.get('/:userId', verifyAuth, UserController.getUser);
 
 export default router;

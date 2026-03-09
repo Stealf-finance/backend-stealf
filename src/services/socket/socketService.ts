@@ -26,32 +26,27 @@ class SocketService {
             const subscribedWallets = new Set<string>();
             const subscribedUsers = new Set<string>();
 
-            // Pre-load user's wallets for ownership validation
-            let userWallets: Set<string> = new Set();
+            // Resolve MongoDB user ID for user-scoped subscriptions
             let userMongoId: string | null = null;
             try {
                 if (socket.user?.organizationId) {
                     const user = await User.findOne({ turnkey_subOrgId: socket.user.organizationId });
                     if (user) {
                         userMongoId = user._id.toString();
-                        if (user.cash_wallet) userWallets.add(user.cash_wallet);
-                        if (user.stealf_wallet) userWallets.add(user.stealf_wallet);
                     }
                 }
             } catch (err) {
-                logger.error({ err }, 'Failed to load user wallets for socket');
+                logger.error({ err }, 'Failed to load user for socket');
             }
 
             socket.on('subscribe:wallet', (walletAddress: unknown) => {
                 if (typeof walletAddress !== 'string' || !SOLANA_ADDRESS_RE.test(walletAddress)) {
                     return;
                 }
-                if (!userWallets.has(walletAddress)) {
-                    return;
-                }
                 if (!subscribedWallets.has(walletAddress)) {
                     socket.join(walletAddress);
                     subscribedWallets.add(walletAddress);
+                    logger.debug({ wallet: walletAddress.slice(0, 8) }, 'Socket subscribed to wallet');
                 }
             });
 

@@ -1,27 +1,36 @@
 import { Request, Response, NextFunction } from 'express';
-import { User } from '../models/User';
 import { solanaService } from '../services/helius/walletInit';
 import { parseTransactions } from '../services/wallet/transactionParser';
+import { getHeliusWebhookManager } from '../services/helius/webhookManager';
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export class WalletController {
     /**
-     * Verify that the requested address belongs to the authenticated user
+     * POST /api/wallet/privacy-wallet
+     * Register a stealf wallet to Helius webhook (not stored in DB)
      */
-    private static async verifyWalletOwnership(req: Request, address: string): Promise<{ authorized: boolean; user?: any }> {
-        const mongoUserId = (req as any).user?.mongoUserId;
-        if (!mongoUserId) {
-            return { authorized: false };
-        }
+    static async registerPrivacyWallet(req: Request, res: Response, next: NextFunction) {
+        try {
+            const mongoUserId = (req as any).user?.mongoUserId;
+            if (!mongoUserId) {
+                return res.status(401).json({ error: 'Authentication required' });
+            }
 
-        const user = await User.findById(mongoUserId);
-        if (!user) {
-            return { authorized: false };
-        }
+            const { walletAddress } = req.body;
+            if (!walletAddress || !SOLANA_ADDRESS_RE.test(walletAddress)) {
+                return res.status(400).json({ error: 'Invalid wallet address' });
+            }
 
-        const isOwner = user.cash_wallet === address || user.stealf_wallet === address;
-        return { authorized: isOwner, user };
+            const webhookManager = getHeliusWebhookManager();
+            await webhookManager.addUserWallets(walletAddress);
+
+            return res.status(200).json({
+                data: { stealf_wallet: walletAddress }
+            });
+        } catch (error) {
+            next(error);
+        }
     }
 
     /**
@@ -35,14 +44,9 @@ export class WalletController {
             }
             const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
-            const { authorized } = await WalletController.verifyWalletOwnership(req, address);
-            if (!authorized) {
-                return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
-            }
-
             const rawTransactions = await solanaService.getTransactions(address, limit);
             const parsedTransactions = await parseTransactions(rawTransactions, address);
-
+            console.log("gethistory:", parsedTransactions);
             return res.status(200).json({
                 success: true,
                 data: {
@@ -64,11 +68,6 @@ export class WalletController {
             const address = req.params.address as string;
             if (!SOLANA_ADDRESS_RE.test(address)) {
                 return res.status(400).json({ error: 'Invalid wallet address' });
-            }
-
-            const { authorized } = await WalletController.verifyWalletOwnership(req, address);
-            if (!authorized) {
-                return res.status(403).json({ error: 'Access denied: wallet does not belong to authenticated user' });
             }
 
             const walletBalance = await solanaService.getBalance(address);

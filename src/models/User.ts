@@ -14,10 +14,9 @@ export interface IUser extends Document{
     autoSweepEnabled: boolean;
     autoSweepInterval: 'daily' | 'weekly';
     autoSweepMinYield: number; // Minimum yield in SOL before sweeping
-    autoSweepVaultType: 'sol_jito' | 'sol_marinade';
+    autoSweepVaultType: 'sol_jito';
 
     points: number;
-    lastDailyBonusAt?: Date;
 }
 
 const userSchema = new Schema<IUser>({
@@ -74,15 +73,12 @@ const userSchema = new Schema<IUser>({
     },
     autoSweepVaultType: {
         type: String,
-        enum: ['sol_jito', 'sol_marinade'],
+        enum: ['sol_jito'],
         default: 'sol_jito',
     },
     points: {
         type: Number,
         default: 0,
-    },
-    lastDailyBonusAt: {
-        type: Date,
     },
 }, {
     timestamps: true

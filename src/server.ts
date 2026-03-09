@@ -21,8 +21,6 @@ import walletRoutes from './routes/walletRoutes';
 import  webhookHeliusRoutes  from './routes/webhookHeliusRoutes'
 import swapRoutes from './routes/swapRoutes';
 import yieldRoutes from './routes/yieldRoutes';
-import lendingRoutes from './routes/lending.routes';
-import pointsRoutes from './routes/points.routes';
 import statsRoutes from './routes/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
@@ -68,8 +66,6 @@ app.use('/api/wallet', walletLimiter, walletRoutes);
 
 app.use('/api/swap', swapLimiter, swapRoutes);
 app.use('/api/yield', yieldLimiter, yieldRoutes);
-app.use('/api/lending', yieldLimiter, lendingRoutes);
-app.use('/api/points', pointsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/helius', webhookHeliusRoutes);
 

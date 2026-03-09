@@ -23,7 +23,7 @@ import {
   buildInstructionData,
   isDevnet,
 } from "./yield.config";
-import { executeJitoStaking, executeMarinadeStaking } from "./sol-staking.service";
+import { executeJitoStaking } from "./sol-staking.service";
 import { getExchangeRate } from "./yield-rates.service";
 import { getArciumVaultService, isArciumEnabled } from "./arcium-vault.service";
 
@@ -65,10 +65,9 @@ export async function buildDepositTransaction(
     .serialize({ requireAllSignatures: false, verifySignatures: false })
     .toString("base64");
 
-  const protocol = vaultType === "sol_jito" ? "Jito" : "Marinade";
   return {
     transaction: serialized,
-    message: `Deposit ${amountSol} SOL into vault. After confirmation, backend will stake to ${protocol}.`,
+    message: `Deposit ${amountSol} SOL into vault. After confirmation, backend will stake to Jito.`,
   };
 }
 
@@ -116,13 +115,11 @@ export async function confirmDeposit(
   if (!depositAmount) throw new Error("Could not extract deposit amount from transaction");
   devLog(`[solDeposit] Amount: ${depositAmount} lamports (${depositAmount / LAMPORTS_PER_SOL} SOL)`);
 
-  // Stake (no-op on devnet)
+  // Stake to Jito (no-op on devnet)
   if (isDevnet()) {
-    devLog(`[solDeposit] DEVNET: skipping ${vaultType} staking`);
-  } else if (vaultType === "sol_jito") {
-    await executeJitoStaking(connection, depositAmount);
+    devLog(`[solDeposit] DEVNET: skipping Jito staking`);
   } else {
-    await executeMarinadeStaking(connection, depositAmount);
+    await executeJitoStaking(connection, depositAmount);
   }
 
   const rate = await getExchangeRate(vaultType);

@@ -195,7 +195,16 @@ export class TransactionHandler {
         try {
             const historyKey = CacheService.historyKey(walletAddress, 100);
 
-            const currentHistory = await CacheService.get<any[]>(historyKey) || [];
+            let currentHistory = await CacheService.get<any[]>(historyKey);
+            if (!currentHistory) {
+                // Cache expired — reload from Helius before appending
+                const { solanaService } = await import('../helius/walletInit');
+                try {
+                    currentHistory = await solanaService.getTransactions(walletAddress, 100);
+                } catch {
+                    currentHistory = [];
+                }
+            }
 
             const isDuplicate = currentHistory.some(
                 (tx) => tx.signature === transaction.signature

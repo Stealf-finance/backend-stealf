@@ -1,6 +1,6 @@
 import redisClient from '../config/redis';
 import { User } from '../models/User';
-import { PointsLog } from '../models/PointsLog';
+import { VaultShare } from '../models/VaultShare';
 
 export interface AppStats {
   totalUsers: number;
@@ -47,7 +47,7 @@ export class StatsService {
     try {
       const [totalUsers, totalTransactions, dailyLoginsRaw] = await Promise.all([
         User.countDocuments(),
-        PointsLog.countDocuments({ action: { $ne: 'daily bonus' } }),
+        VaultShare.countDocuments(),
         redisClient.get(dailyLoginsKey()).catch(() => null),
       ]);
 

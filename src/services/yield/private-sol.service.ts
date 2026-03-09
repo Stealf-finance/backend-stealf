@@ -31,7 +31,7 @@ import {
   buildInstructionData,
   isDevnet,
 } from "./yield.config";
-import { executeJitoStaking, executeMarinadeStaking } from "./sol-staking.service";
+import { executeJitoStaking } from "./sol-staking.service";
 import { getExchangeRate } from "./yield-rates.service";
 import { decomposeToDenominations } from "./denomination.service";
 
@@ -174,13 +174,11 @@ export async function confirmPrivateDeposit(
 
   devLog(`[privateSol] ✅ TX2 authority→vault confirmed: ${vaultDepositSig}`);
 
-  // Stake (no-op on devnet)
+  // Stake to Jito (no-op on devnet)
   if (isDevnet()) {
-    devLog(`[privateSol] DEVNET: skipping ${vaultType} staking`);
-  } else if (vaultType === "sol_jito") {
-    await executeJitoStaking(connection, amountLamports);
+    devLog(`[privateSol] DEVNET: skipping Jito staking`);
   } else {
-    await executeMarinadeStaking(connection, amountLamports);
+    await executeJitoStaking(connection, amountLamports);
   }
 
   const rate = await getExchangeRate(vaultType);
