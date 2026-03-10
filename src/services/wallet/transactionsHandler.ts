@@ -1,5 +1,5 @@
 import { CacheService } from '../cache/cacheService';
-import { parseHeliusTransaction } from './transactionParser';
+import { parseHeliusTransaction, parseTransactions } from './transactionParser';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getSocketService } from '../socket/socketService';
 import { SolPriceService } from '../pricing/solPrice';
@@ -98,8 +98,9 @@ export class TransactionHandler {
                 for (const walletAddress of affectedWallets) {
                     await this.applyDeltas(walletAddress, deltas[walletAddress] || {}, solPrice);
 
-                    const parsedTx = await parseHeliusTransaction(transaction, walletAddress);
-                    await this.saveTransactionToHistory(walletAddress, parsedTx);
+                    const rawTx = await parseHeliusTransaction(transaction, walletAddress);
+                    const [formattedTx] = await parseTransactions([rawTx], walletAddress);
+                    await this.saveTransactionToHistory(walletAddress, formattedTx);
                 }
 
                 txLogger.debug({ affectedWallets: [...affectedWallets].map(w => w.slice(0, 8)) }, 'Affected wallets');
@@ -197,7 +198,6 @@ export class TransactionHandler {
 
             let currentHistory = await CacheService.get<any[]>(historyKey);
             if (!currentHistory) {
-                // Cache expired — reload from Helius before appending
                 const { solanaService } = await import('../helius/walletInit');
                 try {
                     currentHistory = await solanaService.getTransactions(walletAddress, 100);

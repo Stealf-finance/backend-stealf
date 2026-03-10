@@ -118,7 +118,6 @@ export async function parseHeliusTransaction(tx: any, walletAddress: string): Pr
         tokenMint = transfer.mint || null;
 
         if (tokenMint) {
-            // Use Helius-provided symbol if available, otherwise resolve via metadata service
             if (transfer.symbol && transfer.symbol !== 'UNKNOWN') {
                 tokenSymbol = transfer.symbol;
                 tokenDecimals = transfer.decimals || 9;
@@ -132,7 +131,7 @@ export async function parseHeliusTransaction(tx: any, walletAddress: string): Pr
 
     return {
         signature: tx.signature,
-        date: tx.timestamp ? new Date(tx.timestamp * 1000) : null,
+        date: tx.timestamp ? new Date(tx.timestamp * 1000) : new Date(),
         status: tx.err ? 'failed' : 'success',
         amount,
         tokenMint,
@@ -156,13 +155,11 @@ export async function parseTransactions(
     const parsedTransactions: Transaction[] = RawTransactions.map((tx) => {
         let amountUSD = 0;
 
-        // Calculer le prix USD selon le token
         if (tx.tokenSymbol === 'SOL') {
             amountUSD = tx.amount * solPrice;
         } else if (tx.tokenSymbol === 'USDC' || tx.tokenSymbol === 'USDT') {
             amountUSD = tx.amount;
         } else {
-            // Pour les autres tokens, on n'a pas le prix (pourrait être ajouté plus tard)
             amountUSD = 0;
         }
 
