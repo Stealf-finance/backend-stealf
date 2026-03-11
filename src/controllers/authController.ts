@@ -248,9 +248,6 @@ export class UserController {
                 return res.status(404).json({ error: 'User not found' });
             }
 
-            const { VaultShare } = await import('../models/VaultShare');
-            await VaultShare.deleteMany({ userId });
-
             await User.findByIdAndDelete(userId);
 
             logger.info({ userId, email: user.email }, 'Account deleted');

@@ -1,7 +1,3 @@
-/**
- * Shared constants and low-level helpers for all yield services.
- * No business logic — only infrastructure primitives.
- */
 import {
   Connection,
   PublicKey,
@@ -9,9 +5,9 @@ import {
 } from "@solana/web3.js";
 import BN from "bn.js";
 import idl from "../../idl/stealf_vault.json";
-import { VaultType } from "../../models/VaultShare";
 
-// --- Program addresses ---
+export type VaultType = "sol_jito";
+
 
 export const VAULT_PROGRAM_ID = new PublicKey(
   process.env.VAULT_PROGRAM_ID || "4ZxuCrdioJHhqp9sSF5vo9npUdDGRVVMMcq59BnMWqJA"

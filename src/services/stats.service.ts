@@ -1,6 +1,5 @@
 import redisClient from '../config/redis';
 import { User } from '../models/User';
-import { VaultShare } from '../models/VaultShare';
 
 export interface AppStats {
   totalUsers: number;
@@ -47,7 +46,7 @@ export class StatsService {
     try {
       const [totalUsers, totalTransactions, dailyLoginsRaw] = await Promise.all([
         User.countDocuments(),
-        VaultShare.countDocuments(),
+        Promise.resolve(0), // TODO: replace with new yield model
         redisClient.get(dailyLoginsKey()).catch(() => null),
       ]);
 
