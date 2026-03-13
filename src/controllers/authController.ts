@@ -170,6 +170,7 @@ export class UserController {
                         email: user.email,
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
+                        turnkey_subOrgId: user.turnkey_subOrgId,
                         points: user.points,
                         status: user.status,
                     },
@@ -222,6 +223,7 @@ export class UserController {
                         email: user.email,
                         pseudo: user.pseudo,
                         cash_wallet: user.cash_wallet,
+                        subOrgId: user.turnkey_subOrgId,
                         points: user.points,
                         status: user.status,
                     }

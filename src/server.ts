@@ -25,6 +25,7 @@ import statsRoutes from './routes/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
 import { getSocketService } from './services/socket/socketService';
+import { initMxeKey } from './services/yield/anchorProvider';
 
 const app = express();
 
@@ -129,6 +130,11 @@ async function start() {
     const socketService = getSocketService();
     socketService.initialize(httpServer);
     logger.info('Socket.io initialized');
+
+    // Initialize Arcium MXE key (non-blocking — yield routes will fail gracefully if not ready)
+    initMxeKey().catch((err) => {
+      logger.warn({ err }, 'Failed to init MXE key — yield endpoints will be unavailable');
+    });
 
     httpServer.listen(PORT, () => {
       logger.info(`Server running on http://localhost:${PORT}`);

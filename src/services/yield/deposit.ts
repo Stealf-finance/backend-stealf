@@ -5,18 +5,26 @@ import {
   deserializeLE,
 } from "@arcium-hq/client";
 import { randomBytes } from "crypto";
-import { getUserIdHash, getUserStatePDA, getArciumAccounts } from "./constant";
+import { getUserStatePDA, getArciumAccounts } from "./constant";
 import { getProgram, getMxeKey, awaitFinalization } from "./anchorProvider";
 import logger from "../../config/logger";
 
+/**
+ * Register a deposit in the MPC encrypted ledger.
+ *
+ * @param userIdHash  - SHA256 hash of u128ToLE(userId), 32 bytes
+ * @param amount      - deposit amount in lamports
+ * @param memoEphPub  - ephemeral x25519 public key from client memo
+ * @param memoNonce   - nonce from client memo (16 bytes)
+ * @param memoCt      - encrypted userId ciphertext from client memo
+ */
 export async function processDeposit(
-  userId: bigint,
+  userIdHash: Buffer,
   amount: bigint,
   memoEphPub: Uint8Array,
   memoNonce: Buffer,
   memoCt: Uint8Array,
 ): Promise<string> {
-  const userIdHash = getUserIdHash(userId);
   const userStatePDA = getUserStatePDA(userIdHash);
 
   const mxePubKey = getMxeKey();

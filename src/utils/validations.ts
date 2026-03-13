@@ -107,6 +107,16 @@ export const swapExecuteSchema = z.object({
         .min(1, 'signedTransaction is required'),
 });
 
+/**
+ * Schema for yield withdrawal request (POST /api/yield/withdraw)
+ * Frontend sends clear values — backend handles encryption for MPC.
+ */
+export const yieldWithdrawSchema = z.object({
+    userId: z.string(),
+    amount: z.number().int().positive('Amount must be positive (lamports)'),
+    wallet: z.string().regex(solanaAddressRegex, 'Invalid destination wallet address'),
+});
+
 export const heliusWebhookPayloadSchema = z.array(
     z.object({
         signature: z.string(),

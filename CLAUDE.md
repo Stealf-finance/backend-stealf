@@ -1,93 +1,113 @@
-# AI-DLC and Spec-Driven Development
+# Stealf Backend — Claude Context
 
-Kiro-style Spec Driven Development implementation on AI-DLC (AI Development Life Cycle)
+## Project Overview
 
-## Context Recovery
-
-IMPORTANT: At session start, read all .md files in the /docs/ directory to restore full project context from the previous session.
+Stealf is a privacy-focused Solana mobile wallet. This is the Express/TypeScript backend.
+Core features: authentication (Turnkey), wallet management, Jupiter swaps, and **private yield**
+(JitoSOL staking with MPC-encrypted balances via Arcium).
 
 ## Current State
 
-- **Branch**: `fix/security-audit-critical-issues` (PR pending review)
-- **Status**: Security audit complete, 12/18 fixes applied, PR created
-- **Last updated**: 2026-02-04
+- **Branch**: `developpement`
+- **Status**: Yield system (deposit, withdraw, balance, stats) fully wired
+- **Last updated**: 2026-03-13
 
-## Task Progress
+## Architecture
 
-- [x] Full codebase exploration and architecture mapping
-- [x] Security audit completed (IDOR, auth, validation, CORS, rate limiting)
-- [x] Vulnerability report generated with severity ratings
-- [x] Fix CRITICAL: IDOR vulnerabilities in wallet/private balance endpoints
-- [x] Fix CRITICAL: Add ownership validation to withdrawal service
-- [x] Fix CRITICAL: Add input validation to /api/users/auth
-- [x] Fix HIGH: Validate webhook payloads with Zod schema
-- [x] Fix remaining issues (#7, #8, #11, #12, #15, #17)
-- [x] Create PR for security fixes
-- [ ] Merge PR after review
-- [ ] Production hardening (CORS, rate limiting, headers, HTTPS)
+- See `.claude/architecture.md` for full architecture with ASCII diagrams
+- See `.claude/pipeline.md` for frontend/backend flow diagrams
+- See `.claude/audit-security.md` for security audit status
 
-## Security Fixes Applied
+## Key Concepts
 
-| # | Issue | File | Fix |
-|---|-------|------|-----|
-| 1-2 | IDOR wallet access | walletController.ts | `verifyWalletOwnership()` |
-| 3 | IDOR withdrawal | PrivacyWithdraw.ts | Use `userId` directly |
-| 4 | Missing validation | validations.ts | `authUserSchema` |
-| 6 | Webhook validation | WebhookHeliusController.ts | `heliusWebhookPayloadSchema` |
-| 7 | Error disclosure | errorHandler.ts | Default to production mode |
-| 8 | Hardcoded path | server.ts | `path.join(__dirname, ...)` |
-| 11 | Timing attack | authController.ts | 500ms constant-time |
-| 12 | Unbounded limit | walletController.ts | Bound 1-100 |
-| 15 | Hardcoded email | magicLinkService.ts | Use user's email |
-| 17 | Body size limit | server.ts | 10kb limit |
+### Two Solana Programmes
+- **stealf_vault** (`4ZxuCrdioJHhqp9sSF5vo9npUdDGRVVMMcq59BnMWqJA`) — SOL custody vault
+- **private_yield** (`BgjfDZSU1vqJJgxPGGuDAYBUieutknKHQVafwQnyMRrb`) — Arcium MPC encrypted ledger
 
-## Deferred for Production
+### Yield Flow
+- **Deposit**: Frontend sends SOL + JSON memo to vault → Helius webhook → backend stakes to JitoSOL → MPC records encrypted balance
+- **Withdraw**: Frontend POST → backend encrypts params → MPC verifies/decrements → unstake JitoSOL → send SOL
+- **Balance**: Backend calls `get_balance` MPC instruction → decrypts result → returns plaintext over HTTPS
 
-- #5 CORS restriction
-- #9-10 Rate limiting
-- #13 HTTPS enforcement
-- #14 Magic link token in URL
-- #16 Console logging cleanup
-- #18 Security headers (helmet)
+### UUID to PDA
+```
+UUID → uuidToU128() → u128ToLE() → SHA256() → userIdHash → PDA seeds["user_state", hash]
+```
 
-## Project Context
+### Memo Format (deposit)
+Frontend sends JSON via SPL Memo (base58 encoded on-chain):
+```json
+{"hashUserId": "hex32", "ephemeralPublicKey": "hex32", "nonce": "hex16", "ciphertext": "hex32"}
+```
 
-### Paths
-- Steering: `.kiro/steering/`
-- Specs: `.kiro/specs/`
+## Tech Stack
 
-### Steering vs Specification
+Express.js, TypeScript, MongoDB (Mongoose), Redis (ioredis), Socket.IO,
+@solana/web3.js, @coral-xyz/anchor, @arcium-hq/client, Helius SDK,
+Jupiter Ultra API, Pino logging, Zod validation, Helmet, Sentry
 
-**Steering** (`.kiro/steering/`) - Guide AI with project-wide rules and context
-**Specs** (`.kiro/specs/`) - Formalize development process for individual features
+## API Routes
 
-### Active Specifications
-- Check `.kiro/specs/` for active specifications
-- Use `/kiro:spec-status [feature-name]` to check progress
+```
+POST   /api/users/auth              — Register/login (Turnkey JWT)
+POST   /api/users/check-availability — Check email/pseudo
+GET    /api/users/check-verification — Pre-auth status
+GET    /api/users/verify-magic-link  — Verify magic link
+GET    /api/users/sol-price          — SOL/USD price
+DELETE /api/users/account            — Delete account
 
-## Development Guidelines
-- Think in English, generate responses in English. All Markdown content written to project files (e.g., requirements.md, design.md, tasks.md, research.md, validation reports) MUST be written in the target language configured for this specification (see spec.json.language).
+POST   /api/wallet/privacy-wallet   — Register stealf wallet
+GET    /api/wallet/history/:address  — Transaction history
+GET    /api/wallet/balance/:address  — Wallet balance
 
-## Minimal Workflow
-- Phase 0 (optional): `/kiro:steering`, `/kiro:steering-custom`
-- Phase 1 (Specification):
-  - `/kiro:spec-init "description"`
-  - `/kiro:spec-requirements {feature}`
-  - `/kiro:validate-gap {feature}` (optional: for existing codebase)
-  - `/kiro:spec-design {feature} [-y]`
-  - `/kiro:validate-design {feature}` (optional: design review)
-  - `/kiro:spec-tasks {feature} [-y]`
-- Phase 2 (Implementation): `/kiro:spec-impl {feature} [tasks]`
-  - `/kiro:validate-impl {feature}` (optional: after implementation)
-- Progress check: `/kiro:spec-status {feature}` (use anytime)
+POST   /api/swap/order              — Jupiter swap quote
+POST   /api/swap/execute            — Execute signed swap
 
-## Development Rules
-- 3-phase approval workflow: Requirements → Design → Tasks → Implementation
-- Human review required each phase; use `-y` only for intentional fast-track
-- Keep steering current and verify alignment with `/kiro:spec-status`
-- Follow the user's instructions precisely, and within that scope act autonomously: gather the necessary context and complete the requested work end-to-end in this run, asking questions only when essential information is missing or the instructions are critically ambiguous.
+POST   /api/helius/helius           — Wallet transaction webhook
+POST   /api/helius/vault            — Vault deposit webhook
 
-## Steering Configuration
-- Load entire `.kiro/steering/` as project memory
-- Default files: `product.md`, `tech.md`, `structure.md`
-- Custom files are supported (managed via `/kiro:steering-custom`)
+GET    /api/yield/mxe-pubkey        — MXE public key for encryption
+GET    /api/yield/balance/:userId   — Encrypted balance (MPC query)
+GET    /api/yield/stats             — JitoSOL rate + APY
+POST   /api/yield/withdraw          — Withdrawal via MPC
+
+GET    /api/stats                   — Public app statistics
+```
+
+## Development
+
+```bash
+npm run dev          # Dev server (ts-node-dev)
+npm run build        # TypeScript compilation
+npm run start        # Production
+```
+
+## Important Files
+
+| File | Purpose |
+|------|---------|
+| `src/server.ts` | Entry point, Express + Socket.IO setup |
+| `src/services/yield/` | MPC yield system (deposit, withdraw, balance, staking) |
+| `src/services/yield/constant.ts` | Program IDs, PDA derivation, helpers |
+| `src/services/yield/anchorProvider.ts` | Anchor singleton, MXE key, finalization |
+| `src/services/yield/scanner.ts` | Webhook vault → deposit pipeline |
+| `src/idl/private_yield.json` | Anchor IDL for MPC programme |
+| `src/utils/validations.ts` | Zod schemas for all inputs |
+| `src/config/env.ts` | Zod-validated environment variables |
+
+## Conventions
+
+- Controllers are classes with static methods
+- Services are standalone functions or singleton classes
+- All input validation via Zod at API boundary
+- Structured logging with Pino (no console.log)
+- Redis cache-aside pattern (5min TTL) for external API data
+- Auth JWT verified via Turnkey on every protected route
+
+## Security Notes
+
+- `VAULT_AUTHORITY_PRIVATE_KEY` in .env — consider HSM for production
+- Rate limiting disabled in development (`NODE_ENV !== 'production'`)
+- CORS restricted to `FRONTEND_URL` in production only
+- Webhook dedup is in-memory — consider Redis SET for persistence
+- Balance endpoint returns plaintext over HTTPS (auth required)

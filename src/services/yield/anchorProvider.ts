@@ -14,8 +14,8 @@ let mxePublicKey: Uint8Array | null = null;
 // --- Provider ---
 
 function getAuthority(): Keypair {
-  const key = process.env.POOL_AUTHORITY_PRIVATE_KEY;
-  if (!key) throw new Error("POOL_AUTHORITY_PRIVATE_KEY not configured");
+  const key = process.env.VAULT_AUTHORITY_PRIVATE_KEY;
+  if (!key) throw new Error("VAULT_AUTHORITY_PRIVATE_KEY not configured");
   return Keypair.fromSecretKey(new Uint8Array(JSON.parse(key)));
 }
 
@@ -52,7 +52,15 @@ export function getProvider(): AnchorProvider {
 export function getProgram(): Program {
   if (program) return program;
 
-  const idl = require("../../../../private_yield/target/idl/private_yield.json");
+  let idl: any;
+  try {
+    idl = require("../../idl/private_yield.json");
+  } catch {
+    throw new Error(
+      "Missing IDL: src/idl/private_yield.json not found. " +
+      "Copy it from private_yield/target/idl/private_yield.json after building the programme."
+    );
+  }
   program = new Program(idl, getProvider());
   return program;
 }

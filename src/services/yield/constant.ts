@@ -12,14 +12,20 @@ import { BN } from "@coral-xyz/anchor";
 import { createHash } from "crypto";
 
 export const PROGRAM_ID = new PublicKey(
-  process.env.PRIVATE_YIELD_PROGRAM_ID || ""
+  process.env.PRIVATE_YIELD_PROGRAM_ID || "BgjfDZSU1vqJJgxPGGuDAYBUieutknKHQVafwQnyMRrb"
 );
 
 export const CLUSTER_OFFSET = 456;
 
 export const MPC_TIMEOUT_MS = 60_000;
 
-// --- Vault / Jito ---
+// --- Vault (stealf_vault programme) ---
+
+export const VAULT_PROGRAM_ID = new PublicKey(
+  process.env.VAULT_PROGRAM_ID || "4ZxuCrdioJHhqp9sSF5vo9npUdDGRVVMMcq59BnMWqJA"
+);
+
+export const VAULT_ID = 2;
 
 export const JITO_STAKE_POOL = new PublicKey(
   process.env.JITO_STAKE_POOL || "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb"
@@ -30,9 +36,28 @@ export const JITOSOL_MINT = new PublicKey(
 );
 
 export const JUPITER_API_BASE = "https://api.jup.ag/swap/v1";
-export const MIN_DEPOSIT_LAMPORTS = 10_000_000; // 0.01 SOL
-export const MAX_SLIPPAGE_BPS = 50;             // 0.5%
-export const RATE_CACHE_TTL = 300;              // 5 minutes
+export const MIN_DEPOSIT_LAMPORTS = 10_000_000;
+export const MAX_SLIPPAGE_BPS = 50;
+export const RATE_CACHE_TTL = 300;
+
+// --- Vault PDA derivation ---
+
+export function getVaultStatePda(): [PublicKey, number] {
+  const vaultIdBuf = Buffer.alloc(8);
+  vaultIdBuf.writeBigUInt64LE(BigInt(VAULT_ID));
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("vault"), vaultIdBuf],
+    VAULT_PROGRAM_ID
+  );
+}
+
+export function getSolVaultPda(): [PublicKey, number] {
+  const [vaultState] = getVaultStatePda();
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("sol_vault"), vaultState.toBuffer()],
+    VAULT_PROGRAM_ID
+  );
+}
 
 // --- Helpers ---
 
@@ -41,6 +66,14 @@ export function u128ToLE(value: bigint): Buffer {
   buf.writeBigUInt64LE(value & BigInt("0xFFFFFFFFFFFFFFFF"), 0);
   buf.writeBigUInt64LE(value >> BigInt(64), 8);
   return buf;
+}
+
+/**
+ * Convert a UUID string to a u128 bigint.
+ * Strips hyphens and parses the 32 hex chars as a big-endian u128.
+ */
+export function uuidToU128(uuid: string): bigint {
+  return BigInt("0x" + uuid.replace(/-/g, ""));
 }
 
 export function getUserIdHash(userId: bigint): Buffer {
