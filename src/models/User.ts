@@ -27,6 +27,14 @@ export interface IUser extends Document{
     cashStealthSpendingPublic?: string;   // base58 32 bytes — clé publique ed25519
     cashStealthViewingPublic?: string;    // base58 32 bytes — clé publique X25519
     cashStealthViewingPrivateEnc?: string;// AES-256-GCM chiffrée (format iv:tag:ciphertext)
+    // Umbra Mixer (ZK privacy — Mooves SOL + USDC)
+    umbraRegisteredCash?: boolean;
+    umbraRegisteredWealth?: boolean;
+    umbraMasterViewingKeyEnc?: string;   // AES-256-GCM: iv:tag:ciphertext (masterViewingKey)
+    umbraWealthKeypairEnc?: string;      // AES-256-GCM: iv:tag:ciphertext (64-byte keypair)
+    umbraX25519CashPublic?: string;      // base58 — clé publique X25519 cash (non sensible)
+    umbraX25519WealthPublic?: string;    // base58 — clé publique X25519 wealth (non sensible)
+    umbraWealthSignerAddress?: string;   // adresse Solana du keypair Umbra wealth (≠ stealf_wallet pour MWA users)
     // Points system
     points: number;
     lastDailyBonusAt?: Date;
@@ -123,6 +131,30 @@ const userSchema = new Schema<IUser>({
         type: String,
     },
     cashStealthViewingPrivateEnc: {
+        type: String,
+    },
+    // Umbra Mixer
+    umbraRegisteredCash: {
+        type: Boolean,
+        default: false,
+    },
+    umbraRegisteredWealth: {
+        type: Boolean,
+        default: false,
+    },
+    umbraMasterViewingKeyEnc: {
+        type: String,
+    },
+    umbraWealthKeypairEnc: {
+        type: String,
+    },
+    umbraX25519CashPublic: {
+        type: String,
+    },
+    umbraX25519WealthPublic: {
+        type: String,
+    },
+    umbraWealthSignerAddress: {
         type: String,
     },
     points: {

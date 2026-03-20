@@ -67,6 +67,12 @@ export class SwapController {
      * No client-side signing needed — backend handles everything.
      */
     static async executeCash(req: Request, res: Response, next: NextFunction) {
+        if (process.env.SOLANA_RPC_URL?.includes('devnet')) {
+            return res.status(400).json({
+                error: 'Jupiter Ultra requires mainnet. Add JUPITER_API_KEY to .env and use a mainnet RPC URL.',
+            });
+        }
+
         try {
             const validated = swapExecuteCashSchema.parse(req.body);
 

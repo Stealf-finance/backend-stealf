@@ -21,6 +21,7 @@ const mockGetArciumAccounts = jest.fn();
 const mockGetProgram = jest.fn();
 const mockGetVaultStatePDA = jest.fn();
 const mockAwaitFinalizationWithTimeout = jest.fn();
+const mockParseEventFromLogs = jest.fn();
 const mockProofOfYield = jest.fn();
 
 const mockHelpers = {
@@ -32,6 +33,7 @@ const mockHelpers = {
   getProgram: mockGetProgram,
   getVaultStatePDA: mockGetVaultStatePDA,
   awaitFinalizationWithTimeout: mockAwaitFinalizationWithTimeout,
+  parseEventFromLogs: mockParseEventFromLogs,
 };
 
 const mockArciumVaultService = {
@@ -73,7 +75,8 @@ describe("YieldMpcEnhancementsService", () => {
     mockGetMxePublicKey.mockResolvedValue(null);
     mockGetArciumAccounts.mockReturnValue({});
     mockGetVaultStatePDA.mockReturnValue(FAKE_SHARE_PDA);
-    mockAwaitFinalizationWithTimeout.mockResolvedValue("finalize-sig-xyz");
+    mockAwaitFinalizationWithTimeout.mockResolvedValue({ finalizeSig: "finalize-sig-xyz", logs: [] });
+    mockParseEventFromLogs.mockReturnValue(null);
   });
 
   // ==================== computeYieldDistribution ====================

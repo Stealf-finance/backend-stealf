@@ -37,7 +37,7 @@ function decrypt(data: string): number {
 // --- Types ---
 
 export type VaultType = "sol_jito" | "sol_marinade" | "usdc_kamino";
-export type VaultShareStatus = "active" | "withdrawn" | "pending";
+export type VaultShareStatus = "active" | "withdrawn" | "pending" | "processing";
 
 export interface IVaultShare extends Document {
   userId: mongoose.Types.ObjectId;
@@ -94,7 +94,7 @@ const vaultShareSchema = new Schema<IVaultShare>(
     },
     status: {
       type: String,
-      enum: ["active", "withdrawn", "pending"],
+      enum: ["active", "withdrawn", "pending", "processing"],
       default: "pending",
       required: true,
     },

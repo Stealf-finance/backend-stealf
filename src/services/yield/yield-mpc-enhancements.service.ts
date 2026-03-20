@@ -11,7 +11,6 @@ const ARCIUM_VAULT_PROGRAM_ID = new PublicKey(
 );
 
 const MAX_RATE_NUM = 1_100_000n; // Overflow guard: balance * rate_num must fit in u64
-const MPC_TIMEOUT_MS = 60_000;
 
 // ========== TYPES ==========
 
@@ -92,8 +91,9 @@ export class YieldMpcEnhancementsService {
           })
           .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-        const finalizeSig = await this.h.awaitFinalizationWithTimeout(
-          computationOffset
+        const { finalizeSig } = await this.h.awaitFinalizationWithTimeout(
+          computationOffset,
+          sig
         );
 
         console.log(
@@ -127,31 +127,6 @@ export class YieldMpcEnhancementsService {
         );
         const program = this.h.getProgram();
 
-        const resultPromise = new Promise<boolean>((resolve) => {
-          let listenerId: number;
-          let cleaned = false;
-          const cleanup = () => {
-            if (cleaned) return;
-            cleaned = true;
-            try {
-              program.removeEventListener(listenerId);
-            } catch (_e) {}
-          };
-
-          listenerId = program.addEventListener(
-            "reserveProofResult",
-            (event: any) => {
-              cleanup();
-              resolve(event.isSolvent);
-            }
-          );
-
-          setTimeout(() => {
-            cleanup();
-            resolve(false);
-          }, MPC_TIMEOUT_MS);
-        });
-
         const sig = await program.methods
           .queueProofOfReserve(
             computationOffset,
@@ -164,8 +139,9 @@ export class YieldMpcEnhancementsService {
           })
           .rpc({ skipPreflight: true, commitment: "confirmed" });
 
-        await this.h.awaitFinalizationWithTimeout(computationOffset);
-        const isSolvent = await resultPromise;
+        const { logs } = await this.h.awaitFinalizationWithTimeout(computationOffset, sig);
+        const event = this.h.parseEventFromLogs<{ isSolvent: boolean }>(logs, "reserveProofResult");
+        const isSolvent = event?.isSolvent ?? false;
 
         console.log(
           `[YieldMpcEnhancements] proof_of_reserve: isSolvent=${isSolvent}`
@@ -226,8 +202,9 @@ export class YieldMpcEnhancementsService {
           })
           .rpc({ skipPreflight: false, commitment: "confirmed" });
 
-        const finalizeSig = await this.h.awaitFinalizationWithTimeout(
-          computationOffset
+        const { finalizeSig } = await this.h.awaitFinalizationWithTimeout(
+          computationOffset,
+          sig
         );
 
         console.log(

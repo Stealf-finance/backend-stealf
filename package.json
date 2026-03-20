@@ -35,6 +35,8 @@
   },
   "dependencies": {
     "@arcium-hq/client": "^0.8.4",
+    "@umbra-privacy/sdk": "^1.0.0",
+    "@umbra-privacy/web-zk-prover": "^1.0.0",
     "@coral-xyz/anchor": "^0.32.1",
     "@kamino-finance/klend-sdk": "^7.3.18",
     "@marinade.finance/marinade-ts-sdk": "^5.0.18",

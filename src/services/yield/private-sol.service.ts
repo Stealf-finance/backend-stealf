@@ -231,8 +231,8 @@ export async function executePrivateWithdraw(
 }> {
   const amountLamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
 
-  // Verify sufficient shares
-  const userShares = await VaultShare.find({ userId, vaultType, status: "active" });
+  // Verify sufficient shares (include "processing" status: controller already holds the lock)
+  const userShares = await VaultShare.find({ userId, vaultType, status: { $in: ["active", "processing"] } });
   const totalUserShares = userShares.reduce((sum, s) => sum + s.sharesAmount, 0);
   if (amountLamports > totalUserShares) {
     throw new Error(
@@ -290,11 +290,11 @@ export async function executePrivateWithdraw(
 
   devLog(`[privateSol] ✅ Private withdraw vault→authority→${userWallet}: ${txSignature}`);
 
-  // Update VaultShares (FIFO)
+  // Update VaultShares (FIFO, include "processing": controller holds the lock)
   const rate = await getExchangeRate(vaultType);
   const lstToWithdraw = amountLamports / rate;
   const activeShares = await VaultShare.find({
-    userId, vaultType, status: "active",
+    userId, vaultType, status: { $in: ["active", "processing"] },
   }).sort({ depositTimestamp: 1 });
 
   let remaining = lstToWithdraw;
