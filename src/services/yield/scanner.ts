@@ -1,6 +1,8 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getSolVaultPda, MIN_DEPOSIT_LAMPORTS } from "./constant";
+import { initUserState } from "./initUserState";
 import { processDeposit } from "./deposit";
+import { queryAndEmitBalance } from "./balance";
 import { stakeToJito } from "./staking";
 import baseLogger from "../../config/logger";
 
@@ -152,12 +154,20 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
       // 2. Enqueue to serialize: staking uses balance before/after,
       //    concurrent stakes would corrupt the delta calculation
       await enqueue(async () => {
+        // Auto-init MPC state if this is the user's first deposit
+        await initUserState(userIdHash);
+
         const jitosolAmount = await stakeToJito(amountLamports);
         await processDeposit(userIdHash, jitosolAmount, memoEphPub, memoNonce, memoCt);
 
         log.info(
           { sig: signature.slice(0, 12), solIn: amountLamports, jitosolStored: jitosolAmount.toString() },
           "Vault deposit fully processed",
+        );
+
+        // Emit updated balance to frontend (fire-and-forget, outside the queue)
+        queryAndEmitBalance(userIdHash).catch((err) =>
+          log.error({ err }, "Failed to emit yield balance after deposit"),
         );
       });
     } catch (err) {

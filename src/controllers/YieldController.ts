@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { getMxeKey } from "../services/yield/anchorProvider";
 import { withdraw } from "../services/yield/withdraw";
-import { queryBalance } from "../services/yield/balance";
+import { queryBalanceByHash } from "../services/yield/balance";
 import { yieldWithdrawSchema } from "../utils/validations";
 import { uuidToU128 } from "../services/yield/constant";
 import { JitoRateService } from "../services/pricing/jitoRate";
@@ -19,10 +19,12 @@ export class YieldController {
 
   static async getBalance(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.params.userId as string;
-      if (!userId) return res.status(400).json({ error: "userId is required" });
+      const userIdHashHex = req.params.userId as string;
+      if (!userIdHashHex || !/^[0-9a-f]{64}$/.test(userIdHashHex)) {
+        return res.status(400).json({ error: "Valid userIdHash (64 hex chars) is required" });
+      }
 
-      const balance = await queryBalance(uuidToU128(userId));
+      const balance = await queryBalanceByHash(Buffer.from(userIdHashHex, "hex"));
       const { rate, apy } = await JitoRateService.getStats();
 
       // balance is in JitoSOL lamports → convert to SOL

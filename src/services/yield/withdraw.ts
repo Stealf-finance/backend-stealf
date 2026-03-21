@@ -9,6 +9,7 @@ import { randomBytes } from "crypto";
 import { getUserIdHash, getUserStatePDA, getArciumAccounts, u128ToLE } from "./constant";
 import { getProgram, getMxeKey, awaitFinalization } from "./anchorProvider";
 import { unstakeAndSend } from "./unstaking";
+import { queryAndEmitBalance } from "./balance";
 import logger from "../../config/logger";
 
 /**
@@ -26,12 +27,12 @@ export async function withdraw(
   amount: number,
   wallet: string,
 ): Promise<{ mpcSignature: string; transferSignature: string; estimatedSolOut: number }> {
-  // --- 1. Encrypt for MPC ---
+
+  console.log("montant withdraw: ", amount);
   const userIdHash = getUserIdHash(userId);
   const userStatePDA = getUserStatePDA(userIdHash);
   const mxePubKey = getMxeKey();
 
-  // Encrypt userId
   const userEphPriv = x25519.utils.randomSecretKey();
   const userEphPub = x25519.getPublicKey(userEphPriv);
   const userShared = x25519.getSharedSecret(userEphPriv, mxePubKey);
@@ -39,12 +40,10 @@ export async function withdraw(
   const userNonce = randomBytes(16);
   const ctUserId = userCipher.encrypt([userId], userNonce);
 
-  // Encrypt amount
   const amountCipher = userCipher;
   const amountNonce = randomBytes(16);
   const ctAmount = amountCipher.encrypt([BigInt(amount)], amountNonce);
 
-  // Encrypt destination pubkey (split into hi/lo 128 bits)
   const destBytes = new PublicKey(wallet).toBytes();
   const destHi = Buffer.from(destBytes.subarray(0, 16)).readBigUInt64LE(0)
     | (Buffer.from(destBytes.subarray(8, 16)).readBigUInt64LE(0) << BigInt(64));
@@ -56,11 +55,10 @@ export async function withdraw(
   const destLoNonce = randomBytes(16);
   const ctDestLo = amountCipher.encrypt([destLo], destLoNonce);
 
-  // --- 2. MPC bookkeeping ---
-  const computationOffset = new BN(randomBytes(8), "hex");
+  const computationOffset = new BN(randomBytes(8), "le");
   const accounts = getArciumAccounts(computationOffset, "process_withdrawal");
   const program = getProgram();
-
+ 
   const sig = await program.methods
     .processWithdrawal(
       computationOffset,
@@ -93,6 +91,11 @@ export async function withdraw(
   logger.info(
     { transferSig: transferSig.slice(0, 12), sol: estimatedSolOut },
     "Withdrawal SOL sent to user",
+  );
+
+  // Emit updated balance to frontend (fire-and-forget)
+  queryAndEmitBalance(userIdHash).catch((err) =>
+    logger.error({ err }, "Failed to emit yield balance after withdrawal"),
   );
 
   return {

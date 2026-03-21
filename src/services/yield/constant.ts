@@ -12,7 +12,7 @@ import { BN } from "@coral-xyz/anchor";
 import { createHash } from "crypto";
 
 export const PROGRAM_ID = new PublicKey(
-  process.env.PRIVATE_YIELD_PROGRAM_ID || "BgjfDZSU1vqJJgxPGGuDAYBUieutknKHQVafwQnyMRrb"
+  process.env.PRIVATE_YIELD_PROGRAM_ID || "F3ypFyPnffVd4sq3wDRZjHLz3F9GBnYoKw3gSHjN2Uts"
 );
 
 export const CLUSTER_OFFSET = 456;

@@ -22,7 +22,7 @@ Core features: authentication (Turnkey), wallet management, Jupiter swaps, and *
 
 ### Two Solana Programmes
 - **stealf_vault** (`4ZxuCrdioJHhqp9sSF5vo9npUdDGRVVMMcq59BnMWqJA`) — SOL custody vault
-- **private_yield** (`BgjfDZSU1vqJJgxPGGuDAYBUieutknKHQVafwQnyMRrb`) — Arcium MPC encrypted ledger
+- **private_yield** (`F3ypFyPnffVd4sq3wDRZjHLz3F9GBnYoKw3gSHjN2Uts`) — Arcium MPC encrypted ledger
 
 ### Yield Flow
 - **Deposit**: Frontend sends SOL + JSON memo to vault → Helius webhook → backend stakes to JitoSOL → MPC records encrypted balance

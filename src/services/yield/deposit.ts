@@ -36,7 +36,7 @@ export async function processDeposit(
   const amountNonce = randomBytes(16);
   const amountCt = cipher.encrypt([amount], amountNonce);
 
-  const computationOffset = new BN(randomBytes(8), "hex");
+  const computationOffset = new BN(randomBytes(8), "le");
   const accounts = getArciumAccounts(computationOffset, "process_deposit");
   const program = getProgram();
 

@@ -1,6 +1,5 @@
 import { Socket } from 'socket.io';
 import { verifySessionJwtSignature } from "@turnkey/crypto";
-import { User } from '../models/User';
 import { decodeSessionJwt } from './verifyAuth';
 import logger from '../config/logger';
 
@@ -34,12 +33,6 @@ export async function socketAuthMiddleware(socket: Socket, next: (err?: Error) =
         const now = Math.floor(Date.now() / 1000);
         if (decoded.expiry < now){
             return next(new Error('Authentification error: JWT expired'));
-        }
-
-        // Verify user still exists in database (prevents deleted users from connecting)
-        const user = await User.findOne({ turnkey_subOrgId: decoded.organizationId });
-        if (!user) {
-            return next(new Error('Authentication error: User not found'));
         }
 
         socket.user = decoded;

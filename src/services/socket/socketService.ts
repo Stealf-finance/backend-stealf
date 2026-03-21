@@ -7,6 +7,8 @@ import logger from '../../config/logger';
 
 // Solana base58 address: 32-44 alphanumeric chars (no 0, O, I, l)
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// SHA256 hash hex: exactly 64 hex chars
+const HEX_HASH_RE = /^[0-9a-f]{64}$/;
 
 class SocketService {
     private io: SocketIOServer | null = null;
@@ -25,6 +27,7 @@ class SocketService {
         this.io.on('connection', async (socket) => {
             const subscribedWallets = new Set<string>();
             const subscribedUsers = new Set<string>();
+            const subscribedYield = new Set<string>();
 
             // Resolve MongoDB user ID for user-scoped subscriptions
             let userMongoId: string | null = null;
@@ -60,9 +63,21 @@ class SocketService {
                 }
             });
 
+            socket.on('subscribe:yield', (userIdHash: unknown) => {
+                if (typeof userIdHash !== 'string' || !HEX_HASH_RE.test(userIdHash)) {
+                    return;
+                }
+                if (!subscribedYield.has(userIdHash)) {
+                    socket.join(`yield:${userIdHash}`);
+                    subscribedYield.add(userIdHash);
+                    logger.debug({ hash: userIdHash.slice(0, 12) }, 'Socket subscribed to yield');
+                }
+            });
+
             socket.on('disconnect', () => {
                 subscribedWallets.clear();
                 subscribedUsers.clear();
+                subscribedYield.clear();
             });
         });
 
@@ -114,6 +129,24 @@ class SocketService {
 
         this.io.to(`user:${userId}`).emit('private-transfer:status-update', {
             ...transferData,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    emitYieldBalanceUpdate(userIdHashHex: string, data: {
+        balanceLamports: string;
+        balanceJitosol: number;
+        balanceSol: number;
+        rate: number;
+        apy: number;
+    }) {
+        if (!this.io) {
+            logger.warn('Socket.io not initialized');
+            return;
+        }
+
+        this.io.to(`yield:${userIdHashHex}`).emit('yield:balance-updated', {
+            ...data,
             timestamp: new Date().toISOString()
         });
     }
