@@ -13,16 +13,6 @@ import { JitoRateService } from "../pricing/jitoRate";
 import logger from "../../config/logger";
 
 /**
- * Query encrypted balance via MPC, decrypt server-side, return plaintext.
- *
- * Flow:
- * 1. Generate ephemeral X25519 keypair
- * 2. Send get_balance TX on-chain with ephPub + nonce (no dummy ciphertext)
- * 3. MPC decrypts shares, re-encrypts with shared secret (ephPub + MXE)
- * 4. Callback emits BalanceQueried event { encryption_key, client_nonce, shares }
- * 5. Decrypt with ephPriv + client_nonce from event → plaintext balance (JitoSOL lamports)
- */
-/**
  * Query balance by userId (UUID converted to u128).
  */
 export async function queryBalance(userId: bigint): Promise<bigint> {
@@ -37,7 +27,7 @@ export async function queryBalance(userId: bigint): Promise<bigint> {
 export async function queryBalanceByHash(userIdHash: Buffer): Promise<bigint> {
   const userStatePDA = getUserStatePDA(userIdHash);
 
-  // Auto-init if user state doesn't exist yet (returns 0 balance without MPC call)
+  // Auto-init if user state doesn't exist yet
   const provider = getProvider();
   const existing = await provider.connection.getAccountInfo(userStatePDA);
   if (!existing) {
@@ -57,7 +47,6 @@ export async function queryBalanceByHash(userIdHash: Buffer): Promise<bigint> {
   const accounts = getArciumAccounts(computationOffset, "get_balance");
   const program = getProgram();
 
-  // Listen for the BalanceQueried event before sending the TX
   const eventPromise = new Promise<{
     encryptionKey: number[];
     clientNonce: number[];
@@ -101,7 +90,6 @@ export async function queryBalanceByHash(userIdHash: Buffer): Promise<bigint> {
   // Get the event data emitted by the callback
   const event = await eventPromise;
 
-  // Decrypt server-side using client_nonce from the event (not the input nonce)
   const clientNonce = new Uint8Array(event.clientNonce);
   const decrypted = cipher.decrypt([event.shares as any], clientNonce);
   const balance = decrypted[0];

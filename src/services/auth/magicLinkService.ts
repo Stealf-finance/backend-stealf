@@ -37,8 +37,8 @@ export async function sendMagicLink(email: string, pseudo: string){
 
     try {
         const result = await resend.emails.send({
-            from: "Stealf <noreply@stealf.xyz>",
-            to: email,
+            from: "onboarding@resend.dev",
+            to: "stealf.fi@gmail.com",
             subject: "Verify your email - Stealf",
             html: `
             <p>Hi ${pseudo},</p>

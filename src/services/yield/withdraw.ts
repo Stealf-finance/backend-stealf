@@ -12,6 +12,8 @@ import { unstakeAndSend } from "./unstaking";
 import { queryAndEmitBalance } from "./balance";
 import logger from "../../config/logger";
 
+
+
 /**
  * Full withdrawal flow:
  * 1. Encrypt params for MPC (userId, amount, destination)
@@ -37,38 +39,46 @@ export async function withdraw(
   const userEphPub = x25519.getPublicKey(userEphPriv);
   const userShared = x25519.getSharedSecret(userEphPriv, mxePubKey);
   const userCipher = new RescueCipher(userShared);
-  const userNonce = randomBytes(16);
-  const ctUserId = userCipher.encrypt([userId], userNonce);
-
-  const amountCipher = userCipher;
-  const amountNonce = randomBytes(16);
-  const ctAmount = amountCipher.encrypt([BigInt(amount)], amountNonce);
 
   const destBytes = new PublicKey(wallet).toBytes();
+
   const destHi = Buffer.from(destBytes.subarray(0, 16)).readBigUInt64LE(0)
     | (Buffer.from(destBytes.subarray(8, 16)).readBigUInt64LE(0) << BigInt(64));
   const destLo = Buffer.from(destBytes.subarray(16, 24)).readBigUInt64LE(0)
     | (Buffer.from(destBytes.subarray(24, 32)).readBigUInt64LE(0) << BigInt(64));
 
-  const destHiNonce = randomBytes(16);
-  const ctDestHi = amountCipher.encrypt([destHi], destHiNonce);
-  const destLoNonce = randomBytes(16);
-  const ctDestLo = amountCipher.encrypt([destLo], destLoNonce);
+  const memoNonce = randomBytes(16);
+  const memoCt = userCipher.encrypt([userId, BigInt(amount), destHi, destLo], memoNonce);
 
   const computationOffset = new BN(randomBytes(8), "le");
   const accounts = getArciumAccounts(computationOffset, "process_withdrawal");
   const program = getProgram();
  
+  const eventPromise = new Promise<{ verified: bigint }>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      program.removeEventListener(listenerId);
+      reject(new Error("WithdrawalProcessed event timeout"));
+    }, 60_000);
+
+    const listenerId = program.addEventListener("withdrawalProcessed", (event: any) => {
+      clearTimeout(timeout);
+      program.removeEventListener(listenerId);
+      resolve({
+        verified: BigInt(event.verified.toString()),
+      });
+    });
+  });
+
   const sig = await program.methods
     .processWithdrawal(
       computationOffset,
       Array.from(userIdHash) as any,
       Array.from(userEphPub) as any,
-      new BN(deserializeLE(userNonce).toString()),
-      Array.from(ctUserId[0]) as any,
-      Array.from(ctAmount[0]) as any,
-      Array.from(ctDestHi[0]) as any,
-      Array.from(ctDestLo[0]) as any,
+      new BN(deserializeLE(memoNonce).toString()),
+      Array.from(memoCt[0]) as any,
+      Array.from(memoCt[1]) as any,
+      Array.from(memoCt[2]) as any,
+      Array.from(memoCt[3]) as any,
     )
     .accountsPartial({
       userState: userStatePDA,
@@ -85,7 +95,13 @@ export async function withdraw(
     "Withdrawal finalized by MPC",
   );
 
-  // --- 3. Unstake + send SOL ---
+  const event = await eventPromise;
+  logger.info({ verified: event.verified.toString() }, "Withdrawal verification result");
+
+  if (event.verified !== BigInt(1)) {
+    throw new Error("Withdraw: Insufficient balance");
+  }
+
   const { signature: transferSig, estimatedSolOut } = await unstakeAndSend(amount, wallet);
 
   logger.info(

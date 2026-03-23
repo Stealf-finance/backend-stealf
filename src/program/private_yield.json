@@ -2321,6 +2321,10 @@
           {
             "name": "timestamp",
             "type": "i64"
+          },
+          {
+            "name": "verified",
+            "type": "u128"
           }
         ]
       }

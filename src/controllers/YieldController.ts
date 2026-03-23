@@ -64,7 +64,10 @@ export class YieldController {
       );
 
       return res.status(200).json(result);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message?.includes("Withdraw: Insufficient balance")) {
+        return res.status(400).json({ error: error.message });
+      }
       next(error);
     }
   }

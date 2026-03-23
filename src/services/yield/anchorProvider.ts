@@ -54,7 +54,7 @@ export function getProgram(): Program {
 
   let idl: any;
   try {
-    idl = require("../../idl/private_yield.json");
+    idl = require("../../program/private_yield.json");
   } catch {
     throw new Error(
       "Missing IDL: src/idl/private_yield.json not found. " +

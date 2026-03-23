@@ -19,7 +19,7 @@ import {
   getVaultStatePda,
   getSolVaultPda,
 } from "./constant";
-import idl from "../../idl/stealf_vault.json";
+import idl from "../../program/stealf_vault.json";
 import logger from "../../config/logger";
 
 // --- Helpers ---

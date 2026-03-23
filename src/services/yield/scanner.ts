@@ -69,11 +69,8 @@ function extractMemo(tx: any): string | null {
   const instructions = tx.instructions || [];
   for (const ix of instructions) {
     if (MEMO_PROGRAMS.has(ix.programId) || ix.program === "spl-memo") {
-      // Helius enhanced format: memo is in ix.data (base58 encoded raw bytes)
-      // The raw bytes are the UTF-8 JSON string from createMemoInstruction
       if (ix.data) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const bs58 = require("bs58");
           return Buffer.from(bs58.decode(ix.data)).toString("utf-8");
         } catch {
@@ -148,13 +145,10 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
     );
 
     try {
-      // 1. Parse JSON memo → userIdHash + encrypted user identification
+      //  Parse JSON memo → userIdHash + encrypted user identification
       const { userIdHash, memoEphPub, memoNonce, memoCt } = parseMemo(memo);
 
-      // 2. Enqueue to serialize: staking uses balance before/after,
-      //    concurrent stakes would corrupt the delta calculation
       await enqueue(async () => {
-        // Auto-init MPC state if this is the user's first deposit
         await initUserState(userIdHash);
 
         const jitosolAmount = await stakeToJito(amountLamports);
@@ -165,7 +159,7 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
           "Vault deposit fully processed",
         );
 
-        // Emit updated balance to frontend (fire-and-forget, outside the queue)
+        //Emit updated balance to frontend (fire-and-forget, outside the queue)
         queryAndEmitBalance(userIdHash).catch((err) =>
           log.error({ err }, "Failed to emit yield balance after deposit"),
         );
