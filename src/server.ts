@@ -25,7 +25,7 @@ import statsRoutes from './routes/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { getHeliusWebhookManager } from './services/helius/webhookManager';
 import { getSocketService } from './services/socket/socketService';
-import { initMxeKey } from './services/yield/anchorProvider';
+import { initMxeKey, isMpcAvailable, getMxeKey } from './services/yield/anchorProvider';
 
 const app = express();
 
@@ -74,6 +74,8 @@ app.use('/api/helius', webhookHeliusRoutes);
 app.get('/health', async (req, res) => {
   const mongoOk = mongoose.connection.readyState === 1;
   const redisOk = redisClient.status === 'ready';
+  const mxeInitialized = (() => { try { getMxeKey(); return true; } catch { return false; } })();
+  const mpcOk = mxeInitialized && isMpcAvailable();
   const healthy = mongoOk && redisOk;
 
   const mem = process.memoryUsage();
@@ -89,6 +91,7 @@ app.get('/health', async (req, res) => {
     dependencies: {
       mongodb: mongoOk ? 'connected' : 'disconnected',
       redis: redisOk ? 'connected' : 'disconnected',
+      mpc: !mxeInitialized ? 'not_initialized' : mpcOk ? 'available' : 'circuit_breaker_open',
     },
   });
 });

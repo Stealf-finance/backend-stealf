@@ -1,6 +1,6 @@
 # Stealf Backend
 
-Backend API pour **Stealf**, un wallet mobile Solana axé sur la **confidentialité financière**.
+Backend API pour **Stealf**, une fintech Solana axé sur la **confidentialité financière**.
 Stealf permet aux utilisateurs de détenir, échanger et faire fructifier leurs actifs Solana
 tout en gardant leurs soldes privés grâce au chiffrement MPC (Multi-Party Computation) via Arcium.
 

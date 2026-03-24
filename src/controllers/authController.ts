@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
+import { InviteCode } from '../models/InviteCode';
 import { check, success, z } from 'zod';
 import { checkAvailabilitySchema, authUserSchema } from '../utils/validations';
 import { verifySessionJwtSignature } from '@turnkey/crypto';
@@ -15,16 +16,31 @@ export class UserController {
 
     /**
      * POST /api/users/check-availability
-     * Check if email/pseudo are available, return preAuthToken if available
-     * SECURITY: Uses constant-time response to prevent timing-based enumeration
      */
     static async checkAvailability(req: Request, res: Response, next: NextFunction) {
         const startTime = Date.now();
         const MIN_RESPONSE_TIME = 500;
 
         try {
-            const { email, pseudo} = checkAvailabilitySchema.parse(req.body);
+            const { email, pseudo, inviteCode } = checkAvailabilitySchema.parse(req.body);
             const unavailable: number[] = [];
+
+            if (!inviteCode) {
+                const elapsed = Date.now() - startTime;
+                if (elapsed < MIN_RESPONSE_TIME) {
+                    await new Promise(resolve => setTimeout(resolve, MIN_RESPONSE_TIME - elapsed));
+                }
+                return res.status(200).json({ canProceed: false, unavailable: [], errors: [{ field: 'inviteCode', message: 'Invite code is required' }] });
+            }
+
+            const codeExists = await InviteCode.findOne({ code: inviteCode });
+            if (!codeExists) {
+                const elapsed = Date.now() - startTime;
+                if (elapsed < MIN_RESPONSE_TIME) {
+                    await new Promise(resolve => setTimeout(resolve, MIN_RESPONSE_TIME - elapsed));
+                }
+                return res.status(200).json({ canProceed: false, unavailable: [], errors: [{ field: 'inviteCode', message: 'Invalid invite code' }] });
+            }
 
             const [emailExists, pseudoExists] = await Promise.all([
                 email ? User.findOne({ email }).lean() : Promise.resolve(null),
@@ -44,6 +60,9 @@ export class UserController {
                 try {
                     const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
                     await magicLinkService.sendMagicLink(email, pseudo);
+
+                    // Delete the invite code (single use)
+                    await InviteCode.deleteOne({ code: inviteCode });
 
                     responseData = {
                         canProceed: true,
@@ -95,8 +114,6 @@ export class UserController {
 
     /**
      * POST /api/users/send-magic-link
-     * Send magic link email — requires valid preAuthToken
-     * Authorization: Bearer <preAuthToken>
      */
     static async sendMagicLink(req: Request, res: Response, next: NextFunction) {
         try {
@@ -127,7 +144,6 @@ export class UserController {
 
      /**
      * POST /api/users/auth
-     * create user
      */
     static async authUser(req: Request, res: Response, next: NextFunction){
         try {
@@ -196,7 +212,6 @@ export class UserController {
 
     /**
      * GET /api/users/:userId
-     * retrieve user's infos by cash_wallet address
      */
     static async getUser(req: Request, res: Response, next: NextFunction) {
         try {
@@ -236,7 +251,6 @@ export class UserController {
 
     /**
      * DELETE /api/users/account
-     * Delete the authenticated user's account and associated data.
      */
     static async deleteAccount(req: Request, res: Response, next: NextFunction) {
         try {

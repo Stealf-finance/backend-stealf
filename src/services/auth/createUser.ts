@@ -1,5 +1,6 @@
 import { User } from "../../models/User";
 import { getHeliusWebhookManager } from '../helius/webhookManager';
+import { StatsService } from '../stats.service';
 import logger from '../../config/logger';
 
 export async function createUser(email: string, pseudo: string, cash_wallet: string, turnkey_subOrgId: string, stealf_wallet?: string){
@@ -26,6 +27,8 @@ export async function createUser(email: string, pseudo: string, cash_wallet: str
     } catch (error) {
         logger.error({ err: error }, 'Failed to add wallets to webhook');
     }
+
+    StatsService.incrementDailyInscriptions().catch(() => {});
 
     return user;
 }
