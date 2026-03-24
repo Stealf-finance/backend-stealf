@@ -57,25 +57,21 @@ export class UserController {
             let responseData: any;
 
             if (unavailable.length === 0 && email && pseudo) {
-                try {
-                    const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
-                    await magicLinkService.sendMagicLink(email, pseudo);
+                const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
 
-                    // Delete the invite code (single use)
-                    await InviteCode.deleteOne({ code: inviteCode });
+                // Delete the invite code (single use)
+                await InviteCode.deleteOne({ code: inviteCode });
 
-                    responseData = {
-                        canProceed: true,
-                        unavailable: [],
-                        preAuthToken,
-                    };
-                } catch (emailError) {
-                    logger.error({ err: emailError }, 'Failed to send magic link');
-                    responseData = {
-                        canProceed: false,
-                        unavailable: [],
-                    };
-                }
+                // Fire-and-forget — don't block the response on email delivery
+                magicLinkService.sendMagicLink(email, pseudo).catch((err) =>
+                    logger.error({ err }, 'Failed to send magic link'),
+                );
+
+                responseData = {
+                    canProceed: true,
+                    unavailable: [],
+                    preAuthToken,
+                };
             } else {
                 responseData = {
                     canProceed: false,

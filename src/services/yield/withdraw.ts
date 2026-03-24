@@ -30,7 +30,6 @@ export async function withdraw(
   wallet: string,
 ): Promise<{ mpcSignature: string; transferSignature: string; estimatedSolOut: number }> {
 
-  console.log("montant withdraw: ", amount);
   const userIdHash = getUserIdHash(userId);
   const userStatePDA = getUserStatePDA(userIdHash);
   const mxePubKey = getMxeKey();

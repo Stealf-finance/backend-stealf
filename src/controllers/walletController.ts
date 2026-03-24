@@ -46,7 +46,6 @@ export class WalletController {
 
             const rawTransactions = await solanaService.getTransactions(address, limit);
             const parsedTransactions = await parseTransactions(rawTransactions, address);
-            console.log("gethistory:", parsedTransactions);
             return res.status(200).json({
                 success: true,
                 data: {
