@@ -92,14 +92,57 @@ export function getMxeKey(): Uint8Array {
   return mxePublicKey;
 }
 
+// --- MPC Circuit Breaker ---
+
+const CIRCUIT_BREAKER = {
+  failures: 0,
+  threshold: 3,          // Open after 3 consecutive failures
+  cooldownMs: 60_000,    // Try again after 1 minute
+  openedAt: 0,
+};
+
+function circuitBreakerCheck(): void {
+  if (CIRCUIT_BREAKER.failures >= CIRCUIT_BREAKER.threshold) {
+    const elapsed = Date.now() - CIRCUIT_BREAKER.openedAt;
+    if (elapsed < CIRCUIT_BREAKER.cooldownMs) {
+      throw new Error("MPC circuit breaker open — service temporarily unavailable");
+    }
+    // Half-open: allow one attempt through
+    logger.info("MPC circuit breaker half-open, allowing probe request");
+  }
+}
+
+function circuitBreakerSuccess(): void {
+  if (CIRCUIT_BREAKER.failures > 0) {
+    logger.info({ previousFailures: CIRCUIT_BREAKER.failures }, "MPC circuit breaker closed");
+  }
+  CIRCUIT_BREAKER.failures = 0;
+}
+
+function circuitBreakerFailure(): void {
+  CIRCUIT_BREAKER.failures++;
+  CIRCUIT_BREAKER.openedAt = Date.now();
+  logger.warn(
+    { failures: CIRCUIT_BREAKER.failures, threshold: CIRCUIT_BREAKER.threshold },
+    "MPC failure recorded",
+  );
+}
+
+export function isMpcAvailable(): boolean {
+  if (CIRCUIT_BREAKER.failures < CIRCUIT_BREAKER.threshold) return true;
+  return Date.now() - CIRCUIT_BREAKER.openedAt >= CIRCUIT_BREAKER.cooldownMs;
+}
+
 // --- Finalization ---
 
 export async function awaitFinalization(computationOffset: BN): Promise<string> {
+  circuitBreakerCheck();
+
   return new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("MPC finalization timeout")),
-      MPC_TIMEOUT_MS
-    );
+    const timeout = setTimeout(() => {
+      circuitBreakerFailure();
+      reject(new Error("MPC finalization timeout"));
+    }, MPC_TIMEOUT_MS);
 
     awaitComputationFinalization(
       getProvider(),
@@ -109,10 +152,12 @@ export async function awaitFinalization(computationOffset: BN): Promise<string> 
     )
       .then((sig) => {
         clearTimeout(timeout);
+        circuitBreakerSuccess();
         resolve(sig);
       })
       .catch((err) => {
         clearTimeout(timeout);
+        circuitBreakerFailure();
         reject(err);
       });
   });

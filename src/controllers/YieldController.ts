@@ -38,7 +38,10 @@ export class YieldController {
         rate,
         apy,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message?.includes("circuit breaker open")) {
+        return res.status(503).json({ error: "MPC service temporarily unavailable" });
+      }
       next(error);
     }
   }
@@ -67,6 +70,9 @@ export class YieldController {
     } catch (error: any) {
       if (error?.message?.includes("Withdraw: Insufficient balance")) {
         return res.status(400).json({ error: error.message });
+      }
+      if (error?.message?.includes("circuit breaker open")) {
+        return res.status(503).json({ error: "MPC service temporarily unavailable" });
       }
       next(error);
     }
