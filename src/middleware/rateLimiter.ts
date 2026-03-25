@@ -4,7 +4,6 @@ import type { Request, Response } from "express";
 const isDev = process.env.NODE_ENV !== 'production';
 const skipInDev = () => isDev;
 
-// Existing limiter for /check-availability endpoint
 export const availabilityCheckLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 5,
@@ -20,7 +19,6 @@ export const availabilityCheckLimiter = rateLimit({
     }
 });
 
-// Global rate limiter: 100 requests per 15 minutes per IP
 export const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
@@ -38,6 +36,20 @@ export const globalLimiter = rateLimit({
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
+    skip: skipInDev,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many requests, please try again later'
+        });
+    }
+});
+
+// Polling rate limiter: 60 requests per minute per IP (for check-verification polling)
+export const pollingLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
     skip: skipInDev,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
