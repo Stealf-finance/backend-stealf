@@ -9,6 +9,7 @@ import {
   awaitComputationFinalization,
   getCompDefAccOffset,
   getArciumProgramId,
+  getArciumProgram,
   getMXEPublicKey,
   getMXEAccAddress,
   getMempoolAccAddress,
@@ -28,13 +29,13 @@ import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
 
 const ARCIUM_VAULT_PROGRAM_ID = new PublicKey(
   process.env.ARCIUM_VAULT_PROGRAM_ID ||
-    "7VGAdVrL4WH3YUiMLPHWNzUew3DJKE6bLUbvHNHCdMta"
+    "6D7ZcmacwPjdFU3AdwyCfyRUF9EmMAoDUTFJhf6g9Ydw" // v6, arcium-anchor 0.9.2
 );
 
 const CLUSTER_OFFSET = 456; // v0.8.x devnet
 const ARCIUM_VAULT_ID = 1; // Arcium vault uses vault_id=1
 
-const MPC_TIMEOUT_MS = 60_000; // 60 seconds
+const MPC_TIMEOUT_MS = 180_000; // 180 seconds (nodes need to download circuit ~1MB from GitHub)
 const MAX_RETRIES = 3;
 
 // Initial wait before first poll (give MPC nodes time to start processing)
@@ -492,13 +493,9 @@ class ArciumVaultService {
   }
 
   /**
-   * Poll the computation account for the finalization TX instead of relying on WebSocket.
-   *
-   * After the queue TX, Arcium MPC nodes process the computation and submit a finalization TX
-   * that references the same computationAccAddress. We detect it by polling
-   * getSignaturesForAddress() until a second signature appears (different from queueTxSig).
-   *
-   * We then fetch the finalization TX and return its log messages for event parsing.
+   * Poll the computation account STATUS (via Arcium program account) until finalized.
+   * Uses the SDK pattern: fetch computationAccount, check `'finalized' in status`.
+   * Once finalized, fetch the finalization TX logs via getSignaturesForAddress.
    */
   private async awaitFinalizationWithTimeout(
     computationOffset: BN,
@@ -512,46 +509,75 @@ class ArciumVaultService {
       `\n  ↳ computation account: https://explorer.solana.com/address/${computationAccAddress.toBase58()}?cluster=devnet`
     );
 
+    const provider = this.getProvider();
+    const arciumProgram = getArciumProgram(provider);
+
     // Give MPC nodes time to start processing before first poll
     await new Promise((r) => setTimeout(r, POLL_INITIAL_DELAY_MS));
 
     let pollCount = 0;
     while (Date.now() < deadline) {
       try {
-        const sigs = await this.connection.getSignaturesForAddress(
+        const compAcc = await (arciumProgram.account as any).computationAccount.fetchNullable(
           computationAccAddress,
-          { limit: 10 },
           "confirmed"
         );
 
         pollCount++;
-        console.log(`[ArciumVault][Poll] #${pollCount} — ${sigs.length} sig(s) on computation account`);
-        for (const s of sigs) {
-          console.log(`  sig: ${s.signature} | err: ${s.err ? JSON.stringify(s.err) : "null"}`);
+
+        if (compAcc === null) {
+          // Account closed = finalized (rare, depends on Arcium version)
+          console.log(`[ArciumVault][Poll] #${pollCount} — account closed (finalized)`);
+          const finalizeSig = await this.getFinalizationSig(computationAccAddress, queueTxSig);
+          return { finalizeSig, logs: await this.getLogsForSig(finalizeSig) };
         }
 
-        // Finalization TX is a successful TX other than the queue TX
-        const finalization = sigs.find(
-          (s) => s.signature !== queueTxSig && s.err === null
-        );
+        const status = JSON.stringify(compAcc.status);
+        console.log(`[ArciumVault][Poll] #${pollCount} — status: ${status}`);
 
-        if (finalization) {
-          const tx = await this.connection.getTransaction(finalization.signature, {
-            commitment: "confirmed",
-            maxSupportedTransactionVersion: 0,
-          });
-          const logs = tx?.meta?.logMessages ?? [];
-          console.log(`[ArciumVault] Finalization detected (polling): ${finalization.signature}`);
-          return { finalizeSig: finalization.signature, logs };
+        if ("finalized" in compAcc.status) {
+          const finalizeSig = await this.getFinalizationSig(computationAccAddress, queueTxSig);
+          console.log(`[ArciumVault] Finalization detected: ${finalizeSig}`);
+          return { finalizeSig, logs: await this.getLogsForSig(finalizeSig) };
         }
       } catch (err: any) {
-        console.warn(`[ArciumVault][Poll] Error:`, err.message);
+        pollCount++;
+        console.warn(`[ArciumVault][Poll] #${pollCount} Error:`, err.message?.slice(0, 80));
       }
 
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
 
     throw new Error("MPC finalization timeout");
+  }
+
+  private async getFinalizationSig(
+    computationAccAddress: PublicKey,
+    queueTxSig: string
+  ): Promise<string> {
+    for (let retry = 0; retry < 10; retry++) {
+      const sigs = await this.connection.getSignaturesForAddress(
+        computationAccAddress,
+        { limit: 5 },
+        "confirmed"
+      );
+      const finalizeSig = sigs.find((s) => s.signature !== queueTxSig && s.err === null);
+      if (finalizeSig) return finalizeSig.signature;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    throw new Error("Finalization TX not indexed after 10 retries");
+  }
+
+  private async getLogsForSig(signature: string): Promise<string[]> {
+    try {
+      const tx = await this.connection.getTransaction(signature, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+      return tx?.meta?.logMessages ?? [];
+    } catch {
+      return [];
+    }
   }
 
   private async executeMpcWithRetry<T>(

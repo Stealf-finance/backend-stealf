@@ -45,6 +45,9 @@ router.post('/build-and-send-cash', StealthController.buildAndSendCash);
 // Pool Moove — transfère via Privacy Pool (casse le lien on-chain)
 router.post('/pool-moove', StealthController.poolMoove);
 
+// Route stealth — étape 2 authority-indirection (vérifie TX1 + envoie TX2 authority→stealth)
+router.post('/route-stealth', StealthController.routeStealth);
+
 // Dépense de paiements stealth
 router.post('/spend/prepare', StealthController.spendPrepare);
 router.post('/spend/confirm', StealthController.spendConfirm);

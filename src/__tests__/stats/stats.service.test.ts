@@ -92,7 +92,7 @@ describe('StatsService.getAppStats()', () => {
       const result = await StatsService.getAppStats();
 
       expect(result).toEqual({ totalUsers: 10, totalTransactions: 55, dailyLogins: 12 });
-      expect(mockPointsLogCount).toHaveBeenCalledWith({ action: { $ne: 'daily_bonus' } });
+      expect(mockPointsLogCount).toHaveBeenCalledWith({ action: { $ne: 'daily bonus' } });
       expect(mockRedisSet).toHaveBeenCalledWith(
         CACHE_KEY,
         JSON.stringify({ totalUsers: 10, totalTransactions: 55, dailyLogins: 12 }),
@@ -122,7 +122,7 @@ describe('StatsService.getAppStats()', () => {
 
       await StatsService.getAppStats();
 
-      expect(mockPointsLogCount).toHaveBeenCalledWith({ action: { $ne: 'daily_bonus' } });
+      expect(mockPointsLogCount).toHaveBeenCalledWith({ action: { $ne: 'daily bonus' } });
     });
   });
 

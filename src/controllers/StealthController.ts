@@ -10,6 +10,7 @@ import { stripProdError } from '../utils/logger';
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { StealthAddressService } from '../services/stealth/stealth-address.service';
+import { stealthCryptoService } from '../services/stealth/stealth-crypto.service';
 import { StealthTransferService } from '../services/stealth/stealth-transfer.service';
 import { StealthScannerService } from '../services/stealth/stealth-scanner.service';
 import { StealthBalanceService } from '../services/stealth/stealth-balance.service';
@@ -63,6 +64,14 @@ const spendPrepareSchema = z.object({
 const spendConfirmSchema = z.object({
   paymentId: z.string().min(1),
   txSignature: z.string().min(64),
+});
+
+const routeStealthSchema = z.object({
+  tx1Signature: z.string().min(64),
+  stealthAddress: z.string().min(32),
+  ephemeralR: z.string().min(32),
+  viewTag: z.number().int().min(0).max(255),
+  viewingPubKeyB58: z.string().min(32),
 });
 
 // Schema partagé pour l'enregistrement wealth et cash (mêmes champs)
@@ -278,12 +287,19 @@ export class StealthController {
         amountLamports,
       });
 
+      const { viewingPub } = stealthCryptoService.parseMetaAddress(parsed.data.recipientMetaAddress);
+      const viewingPubKeyB58 = bs58.encode(viewingPub);
+      const viewTagHex = result.viewTag.toString(16).padStart(2, '0');
+      const memo = `stealth:v1:${result.ephemeralR}:${viewTagHex}`;
+
       const pointsEarned = await awardPoints(req.user!.userId, 'private transfer');
       return res.json({
         serializedTx: result.serializedTx,
         stealthAddress: result.stealthAddress,
         ephemeralR: result.ephemeralR,
         viewTag: result.viewTag,
+        viewingPubKeyB58,
+        memo,
         pointsEarned,
       });
     } catch (err: any) {
@@ -541,6 +557,68 @@ export class StealthController {
         return res.status(422).json({ error: 'Payment already spent' });
       }
       return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * POST /api/stealth/route-stealth
+   * Étape 2 de l'authority-indirection stealth :
+   *   - Vérifie que TX1 (user → authority) est confirmée on-chain
+   *   - Envoie TX2 (authority → stealthAddress)
+   */
+  static async routeStealth(req: Request, res: Response) {
+    try {
+      const parsed = routeStealthSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten().fieldErrors });
+      }
+
+      const { tx1Signature, stealthAddress } = parsed.data;
+      const connection = new Connection(process.env.SOLANA_RPC_URL!, 'confirmed');
+
+      // Vérifier TX1 confirmée
+      const tx1 = await connection.getParsedTransaction(tx1Signature, { commitment: 'confirmed' });
+      if (!tx1) {
+        return res.status(400).json({ error: 'TX1 not confirmed or not found' });
+      }
+      if (tx1.meta?.err) {
+        return res.status(400).json({ error: 'TX1 failed on-chain' });
+      }
+
+      // Calculer le montant reçu par l'authority (postBalance - preBalance)
+      const authority = Keypair.fromSecretKey(
+        Uint8Array.from(JSON.parse(process.env.VAULT_AUTHORITY_PRIVATE_KEY!))
+      );
+      const authorityPubkey = authority.publicKey.toBase58();
+      const keys = tx1.transaction.message.accountKeys;
+      const authorityIdx = keys.findIndex((k: any) => k.pubkey.toBase58() === authorityPubkey);
+      if (authorityIdx < 0) {
+        return res.status(400).json({ error: 'Authority not found in TX1 accounts' });
+      }
+      const lamports =
+        (tx1.meta?.postBalances?.[authorityIdx] ?? 0) -
+        (tx1.meta?.preBalances?.[authorityIdx] ?? 0);
+      if (lamports <= 0) {
+        return res.status(400).json({ error: 'No lamports received by authority in TX1' });
+      }
+
+      // Construire et envoyer TX2 : authority → stealthAddress
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const tx2 = new Transaction({ recentBlockhash: blockhash, feePayer: authority.publicKey });
+      tx2.add(
+        SystemProgram.transfer({
+          fromPubkey: authority.publicKey,
+          toPubkey: new PublicKey(stealthAddress),
+          lamports,
+        })
+      );
+      tx2.sign(authority);
+      const txSignature = await connection.sendRawTransaction(tx2.serialize());
+      await connection.confirmTransaction({ signature: txSignature, blockhash, lastValidBlockHeight });
+
+      return res.json({ success: true, txSignature });
+    } catch (err: any) {
+      return res.status(500).json({ error: stripProdError(err?.message) || 'Internal server error' });
     }
   }
 }

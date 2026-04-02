@@ -58,6 +58,11 @@ jest.mock('@solana/web3.js', () => {
   };
 });
 
+// Mock points.service — évite que awardPoints appelle user.save() sur un objet sans méthode
+jest.mock('../../services/points.service', () => ({
+  awardPoints: jest.fn().mockResolvedValue(0),
+}));
+
 // Mock verifyAuth middleware — injecter un userId fictif avec une clé Solana valide
 // System Program address = 32 zero bytes = toujours valide
 jest.mock('../../middleware/verifyAuth', () => ({

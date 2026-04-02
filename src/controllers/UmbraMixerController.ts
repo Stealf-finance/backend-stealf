@@ -181,7 +181,7 @@ export class UmbraMixerController {
 
       res.status(202).json({ status: 'pending' });
     } catch (err: any) {
-      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true });
+      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true, reason: 'UMBRA_UNAVAILABLE' });
     }
   }
 
@@ -245,7 +245,7 @@ export class UmbraMixerController {
         res.status(400).json({ error: 'INSUFFICIENT_BALANCE' });
         return;
       }
-      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true });
+      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true, reason: 'UMBRA_UNAVAILABLE' });
     }
   }
 
@@ -267,7 +267,7 @@ export class UmbraMixerController {
       const artifacts = await umbraClaimService.scanUtxos(userId);
       res.json({ artifacts });
     } catch (err: any) {
-      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true });
+      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true, reason: 'UMBRA_UNAVAILABLE' });
     }
   }
 
@@ -301,7 +301,7 @@ export class UmbraMixerController {
         res.status(409).json({ error: err.message });
         return;
       }
-      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true });
+      res.status(503).json({ error: 'Umbra SDK unavailable. Pending npm update.', fallback: true, reason: 'UMBRA_UNAVAILABLE' });
     }
   }
 }

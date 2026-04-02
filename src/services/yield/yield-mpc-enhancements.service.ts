@@ -7,7 +7,7 @@ import { ArciumVaultService } from "./arcium-vault.service";
 
 const ARCIUM_VAULT_PROGRAM_ID = new PublicKey(
   process.env.ARCIUM_VAULT_PROGRAM_ID ||
-    "7VGAdVrL4WH3YUiMLPHWNzUew3DJKE6bLUbvHNHCdMta"
+    "FP5WRzyE2yMARyQcYUZHLzTpseBu7ZbgquPtYGSbmTtL"
 );
 
 const MAX_RATE_NUM = 1_100_000n; // Overflow guard: balance * rate_num must fit in u64
