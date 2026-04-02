@@ -47,7 +47,6 @@ export const solanaService = {
             const { SolPriceService } = await import('../pricing/solPrice');
             const solPrice = await SolPriceService.getSolanaPrice();
 
-            // SOL balance
             const balanceInLamports = await getConnection().getBalance(publicKey);
             const balanceInSOL = balanceInLamports / LAMPORTS_PER_SOL;
 
@@ -59,7 +58,7 @@ export const solanaService = {
                 balanceUSD: balanceInSOL * solPrice,
             }];
 
-            // SPL token balances (Token Program + Token-2022)
+            // SPL token balances
             const [tokenAccounts, token2022Accounts] = await Promise.all([
                 getConnection().getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
                 getConnection().getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID }),
@@ -67,7 +66,6 @@ export const solanaService = {
 
             const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
 
-            // Collect non-zero mints for batch metadata resolution
             const nonZeroAccounts: { mint: string; amount: number; decimals: number }[] = [];
             for (const account of allAccounts) {
                 const info = account.account.data.parsed.info;
@@ -77,7 +75,6 @@ export const solanaService = {
                 nonZeroAccounts.push({ mint, amount, decimals: info.tokenAmount.decimals });
             }
 
-            // Batch resolve all token metadata in one call
             const mints = nonZeroAccounts.map(a => a.mint);
             const metadataMap = mints.length > 0
                 ? await TokenMetadataService.getMetadataBatch(mints)
@@ -169,7 +166,6 @@ export const solanaService = {
                 }
             }
 
-            // Transform Helius transactions to RawTransaction format
             const rawTransactions = await Promise.all(
                 allTransactions.map((tx) => parseHeliusTransaction(tx, address))
             );

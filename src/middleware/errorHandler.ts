@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { Sentry, sentryEnabled } from '../config/sentry';
 import logger from '../config/logger';
 
-// SECURITY: Default to production mode if NODE_ENV not explicitly set to 'development'
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 export const errorHandler = (
@@ -11,10 +10,8 @@ export const errorHandler = (
     res: Response,
     next: NextFunction
 ) => {
-    // Log full error for debugging (server-side only)
     logger.error({ err: error, path: req.path, method: req.method }, 'Unhandled error');
 
-    // Report to Sentry
     if (sentryEnabled) {
         Sentry.captureException(error);
     }
@@ -24,7 +21,6 @@ export const errorHandler = (
         if (mongoError.code === 11000) {
             return res.status(409).json({
                 error: 'Duplicate entry',
-                // SECURITY: Generic message - don't reveal which field is duplicate
                 details: 'A record with these details already exists',
             });
         }
@@ -33,14 +29,12 @@ export const errorHandler = (
     if (error.name === 'ValidationError'){
         return res.status(400).json({
             error: 'Validation failed',
-            // SECURITY: Only expose validation details in development
             details: isDevelopment ? error.message : 'Invalid input data',
         });
     }
 
     return res.status(500).json({
         error: 'Internal server error',
-        // SECURITY: Never expose internal error messages in production
         ...(isDevelopment && { message: error.message }),
     });
 };

@@ -58,7 +58,6 @@ function parseMemo(raw: string): ParsedMemo {
   return { userIdHash, memoEphPub, memoNonce, memoCt };
 }
 
-// --- Memo extraction from Helius payload ---
 
 const MEMO_PROGRAMS = new Set([
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
@@ -111,7 +110,6 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
     if (!signature) continue;
     if (!dedup(signature)) continue;
 
-    // Find SOL deposit to vault
     const nativeTransfers: any[] = tx.nativeTransfers || [];
     const deposit = nativeTransfers.find(
       (t: any) => t.toUserAccount === VAULT_ADDRESS && (t.amount || 0) > 0,
@@ -120,7 +118,6 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
 
     const amountLamports: number = deposit.amount;
 
-    // Minimum deposit check
     if (amountLamports < MIN_DEPOSIT_LAMPORTS) {
       log.debug(
         { sig: signature.slice(0, 12), amount: amountLamports },
@@ -145,7 +142,6 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
     );
 
     try {
-      //  Parse JSON memo → userIdHash + encrypted user identification
       const { userIdHash, memoEphPub, memoNonce, memoCt } = parseMemo(memo);
 
       await enqueue(async () => {
@@ -159,7 +155,6 @@ export async function handleVaultTransaction(payload: any): Promise<void> {
           "Vault deposit fully processed",
         );
 
-        //Emit updated balance to frontend (fire-and-forget, outside the queue)
         queryAndEmitBalance(userIdHash).catch((err) =>
           log.error({ err }, "Failed to emit yield balance after deposit"),
         );

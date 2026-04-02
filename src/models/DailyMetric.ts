@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const dailyMetricSchema = new Schema({
   date: {
-    type: String, // "2026-03-24"
+    type: String,
     required: true,
     unique: true,
   },

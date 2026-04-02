@@ -16,9 +16,6 @@ import logger from "../../config/logger";
 
 /**
  * Full withdrawal flow:
- * 1. Encrypt params for MPC (userId, amount, destination)
- * 2. Submit processWithdrawal on-chain → MPC verifies balance
- * 3. After MPC finalization, unstake JitoSOL → SOL and send to wallet
  *
  * @param userId  - user identifier (u128)
  * @param amount  - withdrawal amount in lamports
@@ -108,7 +105,6 @@ export async function withdraw(
     "Withdrawal SOL sent to user",
   );
 
-  // Emit updated balance to frontend (fire-and-forget)
   queryAndEmitBalance(userIdHash).catch((err) =>
     logger.error({ err }, "Failed to emit yield balance after withdrawal"),
   );

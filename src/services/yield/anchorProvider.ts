@@ -57,7 +57,7 @@ export function getProgram(): Program {
     idl = require("../../program/private_yield.json");
   } catch {
     throw new Error(
-      "Missing IDL: src/idl/private_yield.json not found. " +
+      "Missing IDL: src/program/private_yield.json not found. " +
       "Copy it from private_yield/target/idl/private_yield.json after building the programme."
     );
   }
@@ -96,8 +96,8 @@ export function getMxeKey(): Uint8Array {
 
 const CIRCUIT_BREAKER = {
   failures: 0,
-  threshold: 3,          // Open after 3 consecutive failures
-  cooldownMs: 60_000,    // Try again after 1 minute
+  threshold: 3,
+  cooldownMs: 60_000,
   openedAt: 0,
 };
 
@@ -107,7 +107,6 @@ function circuitBreakerCheck(): void {
     if (elapsed < CIRCUIT_BREAKER.cooldownMs) {
       throw new Error("MPC circuit breaker open — service temporarily unavailable");
     }
-    // Half-open: allow one attempt through
     logger.info("MPC circuit breaker half-open, allowing probe request");
   }
 }

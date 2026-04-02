@@ -9,7 +9,7 @@ interface JitoStats {
 
 const CACHE_KEY_RATE = "jitosol_rate";
 const CACHE_KEY_APY = "jitosol_apy";
-const CACHE_DURATION = 300; // 5 minutes
+const CACHE_DURATION = 300;
 
 export class JitoRateService {
   private static pendingFetch: Promise<JitoStats> | null = null;
@@ -53,7 +53,6 @@ export class JitoRateService {
 
   private static async fetchAndCache(): Promise<JitoStats> {
     try {
-      // Single endpoint returns TVL, supply, and APY as historical arrays
       const res = await axios.get(
         "https://kobe.mainnet.jito.network/api/v1/stake_pool_stats",
         { timeout: 5000 },
@@ -61,14 +60,12 @@ export class JitoRateService {
 
       const data = res.data;
 
-      // Rate: latest TVL (lamports) / latest supply (JitoSOL tokens)
       const tvlArr: { data: number }[] = data.tvl || [];
       const supplyArr: { data: number }[] = data.supply || [];
       const latestTvl = tvlArr[tvlArr.length - 1]?.data ?? 0;
       const latestSupply = supplyArr[supplyArr.length - 1]?.data ?? 1;
       const rate = latestTvl / 1e9 / latestSupply;
 
-      // APY: latest entry, returned as decimal (e.g. 0.059 = 5.9%)
       const apyArr: { data: number }[] = data.apy || [];
       const apy = (apyArr[apyArr.length - 1]?.data ?? 0) * 100;
 
@@ -88,7 +85,6 @@ export class JitoRateService {
         logger.error({ err: error }, "Error fetching JitoSOL rate");
       }
 
-      // Try Redis fallback
       const [fallbackRate, fallbackApy] = await Promise.all([
         redisClient.get(CACHE_KEY_RATE),
         redisClient.get(CACHE_KEY_APY),

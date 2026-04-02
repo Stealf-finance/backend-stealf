@@ -80,16 +80,12 @@ export function getUserIdHash(userId: bigint): Buffer {
   return createHash("sha256").update(u128ToLE(userId)).digest();
 }
 
-// --- PDA derivation ---
-
 export function getUserStatePDA(userIdHash: Buffer): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("user_state"), userIdHash],
     PROGRAM_ID,
   )[0];
 }
-
-// --- Arcium accounts ---
 
 export const clusterAccount = getClusterAccAddress(CLUSTER_OFFSET);
 

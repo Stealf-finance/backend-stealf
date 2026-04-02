@@ -17,7 +17,6 @@ import logger from "../../config/logger";
 export async function initUserState(userIdHash: Buffer): Promise<string | null> {
   const userStatePDA = getUserStatePDA(userIdHash);
 
-  // Check if the account already exists
   const provider = getProvider();
   const existing = await provider.connection.getAccountInfo(userStatePDA);
   if (existing) {

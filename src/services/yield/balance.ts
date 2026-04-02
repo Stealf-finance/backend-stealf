@@ -27,7 +27,6 @@ export async function queryBalance(userId: bigint): Promise<bigint> {
 export async function queryBalanceByHash(userIdHash: Buffer): Promise<bigint> {
   const userStatePDA = getUserStatePDA(userIdHash);
 
-  // Auto-init if user state doesn't exist yet
   const provider = getProvider();
   const existing = await provider.connection.getAccountInfo(userStatePDA);
   if (!existing) {
@@ -87,7 +86,6 @@ export async function queryBalanceByHash(userIdHash: Buffer): Promise<bigint> {
 
   logger.info({ sig: sig.slice(0, 12) }, "getBalance finalized by MPC");
 
-  // Get the event data emitted by the callback
   const event = await eventPromise;
 
   const clientNonce = new Uint8Array(event.clientNonce);

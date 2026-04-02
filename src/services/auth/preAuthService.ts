@@ -73,7 +73,6 @@ export class PreAuthService {
             return;
         }
 
-        // Atomic update via Redis WATCH/MULTI to prevent TOCTOU race conditions
         const redisKey = `${this.REDIS_KEY_PREFIX}${sessionId}`;
         await redisClient.watch(redisKey);
         const raw = await redisClient.get(redisKey);

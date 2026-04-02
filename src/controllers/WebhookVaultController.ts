@@ -28,8 +28,6 @@ export class WebhookVaultController {
 
       const validatedPayload = heliusWebhookPayloadSchema.parse(req.body);
 
-      // Respond immediately — MPC finalization takes ~30s,
-      // Helius would timeout and retry causing duplicate processing
       res.status(200).json({ success: true });
 
       handleVaultTransaction(validatedPayload).catch((err) => {

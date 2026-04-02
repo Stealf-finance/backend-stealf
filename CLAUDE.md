@@ -91,7 +91,7 @@ npm run start        # Production
 | `src/services/yield/constant.ts` | Program IDs, PDA derivation, helpers |
 | `src/services/yield/anchorProvider.ts` | Anchor singleton, MXE key, finalization |
 | `src/services/yield/scanner.ts` | Webhook vault → deposit pipeline |
-| `src/idl/private_yield.json` | Anchor IDL for MPC programme |
+| `src/program/private_yield.json` | Anchor IDL for MPC programme |
 | `src/utils/validations.ts` | Zod schemas for all inputs |
 | `src/config/env.ts` | Zod-validated environment variables |
 

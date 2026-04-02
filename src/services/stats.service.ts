@@ -3,7 +3,7 @@ import { DailyMetric } from '../models/DailyMetric';
 import logger from '../config/logger';
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10); // "2026-03-24"
+  return new Date().toISOString().slice(0, 10);
 }
 
 export class StatsService {

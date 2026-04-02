@@ -10,10 +10,10 @@ interface CoinGeckoResponse {
 
 export class SolPriceService {
 
-    private static CACHE_DURATION = 300; // 5 minutes
+    private static CACHE_DURATION = 300;
     private static CACHE_KEY = 'sol_price';
     private static pendingFetch: Promise<number> | null = null;
-    private static lastKnownPrice: number = 140; // in-memory fallback
+    private static lastKnownPrice: number = 140;
 
     /**
      * retrive solana token price
@@ -68,7 +68,6 @@ export class SolPriceService {
             const fallbackPrice = await redisClient.get(this.CACHE_KEY);
             if (fallbackPrice) return parseFloat(fallbackPrice);
 
-            // Last resort: in-memory price from previous successful fetch
             return this.lastKnownPrice;
         }
     }

@@ -59,10 +59,8 @@ export class UserController {
             if (unavailable.length === 0 && email && pseudo) {
                 const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
 
-                // Delete the invite code (single use)
                 await InviteCode.deleteOne({ code: inviteCode });
 
-                // Fire-and-forget — don't block the response on email delivery
                 magicLinkService.sendMagicLink(email, pseudo).catch((err) =>
                     logger.error({ err }, 'Failed to send magic link'),
                 );

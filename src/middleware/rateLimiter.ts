@@ -32,7 +32,6 @@ export const globalLimiter = rateLimit({
     }
 });
 
-// Auth rate limiter: 10 requests per 15 minutes per IP
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -46,7 +45,6 @@ export const authLimiter = rateLimit({
     }
 });
 
-// Polling rate limiter: 60 requests per minute per IP (for check-verification polling)
 export const pollingLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 60,
@@ -60,7 +58,6 @@ export const pollingLimiter = rateLimit({
     }
 });
 
-// Swap rate limiter: 20 requests per minute per IP
 export const swapLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 20,
@@ -74,7 +71,6 @@ export const swapLimiter = rateLimit({
     }
 });
 
-// Wallet rate limiter: 30 requests per minute per IP
 export const walletLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
@@ -88,7 +84,6 @@ export const walletLimiter = rateLimit({
     }
 });
 
-// Yield rate limiter: 20 requests per minute per IP
 export const yieldLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 20,
@@ -102,7 +97,6 @@ export const yieldLimiter = rateLimit({
     }
 });
 
-// Withdraw rate limiter: 5 requests per 15 minutes per IP
 export const withdrawLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 5,

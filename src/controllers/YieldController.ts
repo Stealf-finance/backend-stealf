@@ -27,7 +27,6 @@ export class YieldController {
       const balance = await queryBalanceByHash(Buffer.from(userIdHashHex, "hex"));
       const { rate, apy } = await JitoRateService.getStats();
 
-      // balance is in JitoSOL lamports → convert to SOL
       const balanceJitosol = Number(balance) / 1e9;
       const balanceSol = balanceJitosol * rate;
 

@@ -13,7 +13,6 @@ export class MagicLinkController{
         try {
             let token: string | undefined;
 
-            // Accept token from Authorization header or query param
             const authHeader = req.headers.authorization;
             if (authHeader && authHeader.startsWith('Bearer ')) {
                 token = authHeader.substring(7);
@@ -56,7 +55,6 @@ export class MagicLinkController{
      * Cache-Control: no-store prevents caching of the token URL.
      */
     static async verifyMagicLink(req: Request, res: Response, _next: NextFunction) {
-        // Prevent token leakage and caching
         res.setHeader('Referrer-Policy', 'no-referrer');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 

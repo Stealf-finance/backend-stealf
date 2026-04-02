@@ -107,7 +107,6 @@ export async function unstakeAndSend(
   const vaultJitosolAta = await getAssociatedTokenAddress(JITOSOL_MINT, vaultState, true);
   const authorityJitosolAta = await getAssociatedTokenAddress(JITOSOL_MINT, authority.publicKey);
 
-  // Jupiter quote
   const quoteResponse = await axios.get(`${JUPITER_API_BASE}/quote`, {
     params: {
       inputMint: JITOSOL_MINT.toBase58(),
@@ -126,7 +125,6 @@ export async function unstakeAndSend(
     throw new Error(`Slippage too high: ${slippagePercent.toFixed(2)}% (max 0.5%)`);
   }
 
-  // Jupiter swap instructions
   const swapResponse = await axios.post(
     `${JUPITER_API_BASE}/swap-instructions`,
     { quoteResponse: quote, userPublicKey: authority.publicKey.toBase58() },
@@ -152,7 +150,6 @@ export async function unstakeAndSend(
 
   const tx = new Transaction();
 
-  // Step 1: withdraw JitoSOL from vault ATA → authority ATA
   const discriminator = getIdlDiscriminator("withdraw_token");
   const data = Buffer.alloc(8 + 8);
   discriminator.copy(data, 0);
@@ -171,7 +168,6 @@ export async function unstakeAndSend(
     data,
   });
 
-  // Step 2: Jupiter swap JitoSOL → SOL
   if (swapIxs.setupInstructions?.length) {
     for (const ix of swapIxs.setupInstructions) tx.add(deserializeIx(ix));
   }

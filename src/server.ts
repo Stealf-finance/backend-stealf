@@ -31,10 +31,8 @@ const app = express();
 
 const httpServer = createServer(app);
 
-// Security headers
 app.use(helmet());
 
-// CORS — restricted to allowed origins
 app.use(cors({
   origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -42,21 +40,15 @@ app.use(cors({
   credentials: true,
 }));
 
-// HTTP request logging
 app.use(httpLogger);
 
-// Helius webhooks can send large payloads (swap transactions, etc.)
 app.use('/api/helius', express.json({ limit: '5mb' }));
 
-// SECURITY: Limit request body size to prevent DoS (all other routes)
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// Global rate limiting
 app.use(globalLimiter);
 
-// Serve Apple App Site Association file
-// SECURITY: Use relative path instead of hardcoded absolute path
 app.get('/.well-known/apple-app-site-association', (req, res) => {
   res.type('application/json');
   res.sendFile(path.join(__dirname, '../public/.well-known/apple-app-site-association'));
@@ -70,7 +62,7 @@ app.use('/api/yield', yieldLimiter, yieldRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/helius', webhookHeliusRoutes);
 
-// Enhanced health check with dependency status
+
 app.get('/health', async (req, res) => {
   const mongoOk = mongoose.connection.readyState === 1;
   const redisOk = redisClient.status === 'ready';
@@ -96,7 +88,6 @@ app.get('/health', async (req, res) => {
   });
 });
 
-// Readiness probe for orchestrators (K8s, ECS, etc.)
 app.get('/ready', (req, res) => {
   const mongoOk = mongoose.connection.readyState === 1;
   const redisOk = redisClient.status === 'ready';
@@ -149,7 +140,6 @@ async function start() {
   }
 }
 
-// Graceful shutdown
 const gracefulShutdown = async (signal: string) => {
   logger.info(`${signal} received. Starting graceful shutdown...`);
 
