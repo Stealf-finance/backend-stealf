@@ -42,10 +42,12 @@ export class WalletController {
             if (!SOLANA_ADDRESS_RE.test(address)) {
                 return res.status(400).json({ error: 'Invalid wallet address' });
             }
-            const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 200);
+            const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 50);
 
-            const rawTransactions = await solanaService.getTransactions(address, limit);
-            const parsedTransactions = await parseTransactions(rawTransactions, address);
+            // Fetch a larger pool then filter to keep `limit` valid transactions
+            const rawTransactions = await solanaService.getTransactions(address, 200);
+            const allParsed = await parseTransactions(rawTransactions, address);
+            const parsedTransactions = allParsed.slice(0, limit);
             return res.status(200).json({
                 success: true,
                 data: {
