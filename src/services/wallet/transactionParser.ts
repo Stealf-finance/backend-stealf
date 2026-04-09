@@ -152,7 +152,9 @@ export async function parseTransactions(
 
     const solPrice = await SolPriceService.getSolanaPrice();
 
-    const parsedTransactions: Transaction[] = RawTransactions.map((tx) => {
+    const parsedTransactions: Transaction[] = RawTransactions
+        .filter((tx) => tx.type === 'sent' || tx.type === 'received')
+        .map((tx) => {
         let amountUSD = 0;
 
         if (tx.tokenSymbol === 'SOL') {
@@ -179,7 +181,7 @@ export async function parseTransactions(
         };
     });
 
-    return parsedTransactions;
+    return parsedTransactions.filter((tx) => tx.amountUSD >= 1);
 }
 
 export function filterTransactionsByType(

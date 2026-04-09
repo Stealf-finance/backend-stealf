@@ -111,9 +111,9 @@ export const solanaService = {
     },
 
 
-    async getTransactions(address: string, limit: number = 100): Promise<any[]> {
+    async getTransactions(address: string, limit: number = 200): Promise<any[]> {
 
-        const cacheKey = CacheService.historyKey(address, 100);
+        const cacheKey = CacheService.historyKey(address, 200);
         const cached = await CacheService.get<any[]>(cacheKey);
 
         if (cached !== null){
@@ -138,7 +138,7 @@ export const solanaService = {
             let lastSignature: string | null = null;
             let allTransactions: any[] = [];
 
-            while (allTransactions.length < 100) {
+            while (allTransactions.length < 200) {
                 if (lastSignature) {
                     url = baseUrl + `&before=${lastSignature}`;
                 }
@@ -157,8 +157,8 @@ export const solanaService = {
                     allTransactions = [...allTransactions, ...transactions];
                     lastSignature = transactions[transactions.length - 1].signature;
 
-                    if (allTransactions.length >= 100) {
-                        allTransactions = allTransactions.slice(0, 100);
+                    if (allTransactions.length >= 200) {
+                        allTransactions = allTransactions.slice(0, 200);
                         break;
                     }
                 } else {
