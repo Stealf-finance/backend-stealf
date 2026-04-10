@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { TransactionHandler } from '../services/wallet/transactionsHandler';
+import { TransactionHandler } from '../services/helius/transactionsHandler';
 import { heliusWebhookPayloadSchema } from '../utils/validations';
 import logger from '../config/logger';
 
@@ -24,6 +24,10 @@ export class WebhookHeliusController {
                 logger.warn('Unauthorized webhook request - invalid secret');
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
+
+            // TODO: remove debug log
+            const rawBody = Array.isArray(req.body) ? req.body[0] : req.body;
+            logger.info({ keys: Object.keys(rawBody || {}), type: rawBody?.type, source: rawBody?.source }, 'Webhook raw body keys');
 
             const validatedPayload = heliusWebhookPayloadSchema.parse(req.body);
 

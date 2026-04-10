@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { solanaService } from '../services/helius/walletInit';
-import { parseTransactions } from '../services/wallet/transactionParser';
+import { parseTransactions } from '../services/helius/parsers/parseTransactions';
 import { getHeliusWebhookManager } from '../services/helius/webhookManager';
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;

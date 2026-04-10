@@ -72,7 +72,7 @@ export const authUserSchema = z.object({
 });
 
 /**
- * Schema for Helius webhook payload validation
+ * Schema for Helius enhanced webhook payload validation (used by vault webhook)
  */
 const heliusTransferSchema = z.object({
     fromUserAccount: z.string().optional(),
@@ -88,6 +88,22 @@ const heliusInstructionSchema = z.object({
     data: z.string().optional(),
     memo: z.string().optional(),
 });
+
+export const heliusEnhancedPayloadSchema = z.array(
+    z.object({
+        signature: z.string(),
+        nativeTransfers: z.array(heliusTransferSchema).optional(),
+        tokenTransfers: z.array(heliusTransferSchema).optional(),
+        instructions: z.array(heliusInstructionSchema).optional(),
+    })
+).or(
+    z.object({
+        signature: z.string(),
+        nativeTransfers: z.array(heliusTransferSchema).optional(),
+        tokenTransfers: z.array(heliusTransferSchema).optional(),
+        instructions: z.array(heliusInstructionSchema).optional(),
+    })
+);
 
 export const swapOrderSchema = z.object({
     inputMint: z.string()
@@ -118,18 +134,36 @@ export const yieldWithdrawSchema = z.object({
     wallet: z.string().regex(solanaAddressRegex, 'Invalid destination wallet address'),
 });
 
-export const heliusWebhookPayloadSchema = z.array(
-    z.object({
-        signature: z.string(),
-        nativeTransfers: z.array(heliusTransferSchema).optional(),
-        tokenTransfers: z.array(heliusTransferSchema).optional(),
-        instructions: z.array(heliusInstructionSchema).optional(),
-    })
-).or(
-    z.object({
-        signature: z.string(),
-        nativeTransfers: z.array(heliusTransferSchema).optional(),
-        tokenTransfers: z.array(heliusTransferSchema).optional(),
-        instructions: z.array(heliusInstructionSchema).optional(),
-    })
-);
+const rawTokenBalanceSchema = z.object({
+    accountIndex: z.number(),
+    mint: z.string(),
+    owner: z.string().optional(),
+    uiTokenAmount: z.object({
+        amount: z.string(),
+        decimals: z.number(),
+        uiAmount: z.number().nullable(),
+        uiAmountString: z.string().optional(),
+    }),
+}).passthrough();
+
+const rawTxSchema = z.object({
+    blockTime: z.number().nullable(),
+    slot: z.number(),
+    meta: z.object({
+        err: z.any().nullable(),
+        fee: z.number(),
+        preBalances: z.array(z.number()),
+        postBalances: z.array(z.number()),
+        preTokenBalances: z.array(rawTokenBalanceSchema).optional(),
+        postTokenBalances: z.array(rawTokenBalanceSchema).optional(),
+    }).passthrough(),
+    transaction: z.object({
+        message: z.object({
+            accountKeys: z.array(z.string()),
+            instructions: z.array(z.any()).optional(),
+        }).passthrough(),
+        signatures: z.array(z.string()),
+    }),
+}).passthrough();
+
+export const heliusWebhookPayloadSchema = z.array(rawTxSchema).or(rawTxSchema);

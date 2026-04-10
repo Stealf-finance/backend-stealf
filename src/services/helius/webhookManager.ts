@@ -6,9 +6,7 @@ import logger from '../../config/logger';
 class HeliusWebhookManager {
     private helius;
     private isDevnet = process.env.SOLANA_RPC_URL?.includes('devnet') ?? false;
-    private webhookConfigId = process.env.SOLANA_RPC_URL?.includes('devnet')
-        ? 'helius-solana-devnet'
-        : 'helius-solana-mainnet';
+    private webhookConfigId = `helius-solana-${process.env.SOLANA_RPC_URL?.includes('devnet') ? 'devnet' : 'mainnet'}-${process.env.NODE_ENV === 'production' ? 'prod' : 'dev'}`;
 
     constructor() {
         this.helius = createHelius({
@@ -40,7 +38,7 @@ class HeliusWebhookManager {
                 webhookURL: fullWebhookUrl,
                 transactionTypes: ['ANY'],
                 accountAddresses: wallets,
-                webhookType: 'enhanced',
+                webhookType: 'raw',
             });
 
             logger.info({ webhookId: webhook.webhookID }, 'Webhook created');
@@ -49,6 +47,7 @@ class HeliusWebhookManager {
                 _id: this.webhookConfigId,
                 provider: 'helius',
                 network: this.isDevnet ? 'solana-devnet' : 'solana-mainnet',
+                env: process.env.NODE_ENV === 'production' ? 'production' : 'development',
                 webhookId: webhook.webhookID,
                 url: fullWebhookUrl,
                 accountCount: wallets.length,

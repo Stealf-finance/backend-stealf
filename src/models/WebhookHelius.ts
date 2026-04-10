@@ -7,6 +7,7 @@ export interface IWebhookHelius extends Omit<Document, '_id'> {
     webhookId: string;
     url: string;
     accountCount: number;
+    env: 'development' | 'production';
     status: 'active' | 'inactive' | 'error';
     createdAt: Date;
     updatedAt: Date;
@@ -43,6 +44,11 @@ const webhookHeliusSchema = new Schema<IWebhookHelius>(
             required: true,
             default: 0,
             min: 0,
+        },
+        env: {
+            type: String,
+            required: true,
+            enum: ['development', 'production'],
         },
         status: {
             type: String,

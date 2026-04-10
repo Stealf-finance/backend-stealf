@@ -1,21 +1,14 @@
 import { CacheService } from '../cache/cacheService';
-import { parseHeliusTransaction, parseTransactions } from './transactionParser';
+import { parseRawTransaction } from './parsers/parseRaw';
+import { parseTransactions } from './parsers/parseTransactions';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getSocketService } from '../socket/socketService';
 import { SolPriceService } from '../pricing/solPrice';
 import { TokenMetadataService } from '../token/TokenMetadataService';
-import { WalletBalance } from '../helius/walletInit';
+import { WalletBalance } from './walletInit';
 import baseLogger from '../../config/logger';
 
 const txLogger = baseLogger.child({ module: 'TransactionHandler' });
-
-interface Transfer {
-    fromUserAccount?: string;
-    toUserAccount?: string;
-    amount?: number;
-    tokenAmount?: number;
-    mint?: string;
-}
 
 // Accumulated delta per wallet per token
 interface WalletDeltas {
@@ -34,13 +27,13 @@ export class TransactionHandler {
             const transactions = Array.isArray(payload) ? payload : [payload];
             txLogger.debug({ count: transactions.length }, 'Received transactions');
 
-            for (const transaction of transactions) {
-                const signature = transaction?.signature;
-                const nativeTransfers: Transfer[] = transaction?.nativeTransfers || [];
-                const tokenTransfers: Transfer[] = transaction?.tokenTransfers || [];
+            for (const rawTx of transactions) {
+                const signature = rawTx?.transaction?.signatures?.[0];
+                const accountKeys: string[] = rawTx?.transaction?.message?.accountKeys || [];
+                const meta = rawTx?.meta;
 
-                if (!signature || (nativeTransfers.length === 0 && tokenTransfers.length === 0)) {
-                    txLogger.debug('Skipping: no signature or no transfers');
+                if (!signature || !meta || accountKeys.length === 0) {
+                    txLogger.debug('Skipping: no signature or meta');
                     continue;
                 }
 
@@ -50,7 +43,7 @@ export class TransactionHandler {
                 }
                 this.processedTransactions.add(signature);
 
-                // Evict oldest entries when set gets too large to prevent memory leak
+                // Evict oldest entries when set gets too large
                 if (this.processedTransactions.size > MAX_DEDUP_SIZE) {
                     const it = this.processedTransactions.values();
                     for (let i = 0; i < MAX_DEDUP_SIZE / 2; i++) {
@@ -58,37 +51,48 @@ export class TransactionHandler {
                     }
                 }
 
-                txLogger.debug({ signature: signature.slice(0, 12), nativeTransfers: nativeTransfers.length, tokenTransfers: tokenTransfers.length }, 'Processing transaction');
+                const preBalances: number[] = meta.preBalances || [];
+                const postBalances: number[] = meta.postBalances || [];
+
+                txLogger.debug({ signature: signature.slice(0, 12), accounts: accountKeys.length }, 'Processing raw transaction');
 
                 const deltas: WalletDeltas = {};
                 const affectedWallets = new Set<string>();
 
-                // Accumulate native (SOL) deltas
-                for (const transfer of nativeTransfers) {
-                    const { fromUserAccount, toUserAccount, amount } = transfer;
-                    const solAmount = (amount || 0) / LAMPORTS_PER_SOL;
-
-                    if (fromUserAccount) {
-                        this.addDelta(deltas, fromUserAccount, null, -solAmount);
-                        affectedWallets.add(fromUserAccount);
-                    }
-                    if (toUserAccount) {
-                        this.addDelta(deltas, toUserAccount, null, solAmount);
-                        affectedWallets.add(toUserAccount);
+                // SOL deltas from preBalances/postBalances
+                for (let i = 0; i < accountKeys.length; i++) {
+                    const diff = (postBalances[i] || 0) - (preBalances[i] || 0);
+                    if (diff !== 0) {
+                        const solDelta = diff / LAMPORTS_PER_SOL;
+                        this.addDelta(deltas, accountKeys[i], null, solDelta);
+                        affectedWallets.add(accountKeys[i]);
                     }
                 }
 
-                // Accumulate SPL token deltas
-                for (const transfer of tokenTransfers) {
-                    const { fromUserAccount, toUserAccount, tokenAmount, mint } = transfer;
+                // SPL token deltas from preTokenBalances/postTokenBalances
+                const preTokenMap = new Map<number, any>();
+                const postTokenMap = new Map<number, any>();
+                for (const tb of meta.preTokenBalances || []) preTokenMap.set(tb.accountIndex, tb);
+                for (const tb of meta.postTokenBalances || []) postTokenMap.set(tb.accountIndex, tb);
 
-                    if (fromUserAccount) {
-                        this.addDelta(deltas, fromUserAccount, mint || null, -(tokenAmount || 0));
-                        affectedWallets.add(fromUserAccount);
-                    }
-                    if (toUserAccount) {
-                        this.addDelta(deltas, toUserAccount, mint || null, tokenAmount || 0);
-                        affectedWallets.add(toUserAccount);
+                const allTokenIndices = new Set([...preTokenMap.keys(), ...postTokenMap.keys()]);
+                for (const idx of allTokenIndices) {
+                    const pre = preTokenMap.get(idx);
+                    const post = postTokenMap.get(idx);
+                    const preAmount = pre ? parseInt(pre.uiTokenAmount.amount) : 0;
+                    const postAmount = post ? parseInt(post.uiTokenAmount.amount) : 0;
+                    const diff = postAmount - preAmount;
+
+                    if (diff !== 0) {
+                        const owner = post?.owner || pre?.owner;
+                        const mint = post?.mint || pre?.mint;
+                        const decimals = post?.uiTokenAmount?.decimals ?? pre?.uiTokenAmount?.decimals ?? 9;
+
+                        if (owner && mint) {
+                            const tokenDelta = diff / Math.pow(10, decimals);
+                            this.addDelta(deltas, owner, mint, tokenDelta);
+                            affectedWallets.add(owner);
+                        }
                     }
                 }
 
@@ -98,9 +102,11 @@ export class TransactionHandler {
                 for (const walletAddress of affectedWallets) {
                     await this.applyDeltas(walletAddress, deltas[walletAddress] || {}, solPrice);
 
-                    const rawTx = await parseHeliusTransaction(transaction, walletAddress);
-                    const [formattedTx] = await parseTransactions([rawTx], walletAddress);
-                    await this.saveTransactionToHistory(walletAddress, formattedTx);
+                    const parsedRawTx = await parseRawTransaction(rawTx, walletAddress);
+                    const [formattedTx] = await parseTransactions([parsedRawTx], walletAddress);
+                    if (formattedTx) {
+                        await this.saveTransactionToHistory(walletAddress, formattedTx);
+                    }
                 }
 
                 txLogger.debug({ affectedWallets: [...affectedWallets].map(w => w.slice(0, 8)) }, 'Affected wallets');

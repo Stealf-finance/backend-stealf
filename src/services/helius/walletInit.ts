@@ -1,6 +1,6 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { CacheService } from "../cache/cacheService";
-import { parseHeliusTransaction } from "../wallet/transactionParser";
+import { parseEnhancedTransaction } from "./parsers/parseEnhanced";
 import { TokenMetadataService } from "../token/TokenMetadataService";
 import logger from "../../config/logger";
 
@@ -167,7 +167,7 @@ export const solanaService = {
             }
 
             const rawTransactions = await Promise.all(
-                allTransactions.map((tx) => parseHeliusTransaction(tx, address))
+                allTransactions.map((tx) => parseEnhancedTransaction(tx, address))
             );
 
             await CacheService.set(cacheKey, rawTransactions, 300);

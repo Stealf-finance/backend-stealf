@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import { z } from "zod";
 import { handleVaultTransaction } from "../services/yield/scanner";
-import { heliusWebhookPayloadSchema } from "../utils/validations";
+import { heliusEnhancedPayloadSchema } from "../utils/validations";
 import logger from "../config/logger";
 
 export class WebhookVaultController {
@@ -26,7 +26,7 @@ export class WebhookVaultController {
         return res.status(401).json({ success: false, error: "Unauthorized" });
       }
 
-      const validatedPayload = heliusWebhookPayloadSchema.parse(req.body);
+      const validatedPayload = heliusEnhancedPayloadSchema.parse(req.body);
 
       res.status(200).json({ success: true });
 
