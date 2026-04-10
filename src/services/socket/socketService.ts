@@ -89,9 +89,6 @@ class SocketService {
             return;
         }
 
-        const room = this.io.sockets.adapter.rooms.get(walletAddress);
-        logger.debug({ wallet: walletAddress.slice(0, 8), listeners: room?.size || 0 }, 'Emitting balance:updated');
-
         this.io.to(walletAddress).emit('balance:updated', {
             address: walletAddress,
             tokens: walletBalance.tokens,
@@ -105,9 +102,6 @@ class SocketService {
             logger.warn('Socket.io not initialized');
             return;
         }
-
-        const room = this.io.sockets.adapter.rooms.get(walletAddress);
-        logger.debug({ wallet: walletAddress.slice(0, 8), listeners: room?.size || 0, signature: transaction?.signature?.slice(0, 12) }, 'Emitting transaction:new');
 
         this.io.to(walletAddress).emit('transaction:new', {
             address: walletAddress,
@@ -170,6 +164,12 @@ class SocketService {
             balances,
             timestamp: new Date().toISOString()
         });
+    }
+
+    hasListeners(walletAddress: string): boolean {
+        if (!this.io) return false;
+        const room = this.io.sockets.adapter.rooms.get(walletAddress);
+        return (room?.size || 0) > 0;
     }
 
     close(): Promise<void> {

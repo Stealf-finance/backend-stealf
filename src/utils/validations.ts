@@ -89,21 +89,19 @@ const heliusInstructionSchema = z.object({
     memo: z.string().optional(),
 });
 
-export const heliusEnhancedPayloadSchema = z.array(
-    z.object({
-        signature: z.string(),
-        nativeTransfers: z.array(heliusTransferSchema).optional(),
-        tokenTransfers: z.array(heliusTransferSchema).optional(),
-        instructions: z.array(heliusInstructionSchema).optional(),
-    })
-).or(
-    z.object({
-        signature: z.string(),
-        nativeTransfers: z.array(heliusTransferSchema).optional(),
-        tokenTransfers: z.array(heliusTransferSchema).optional(),
-        instructions: z.array(heliusInstructionSchema).optional(),
-    })
-);
+const heliusAccountDataSchema = z.object({
+    account: z.string(),
+}).passthrough();
+
+const heliusEnhancedTxSchema = z.object({
+    signature: z.string(),
+    nativeTransfers: z.array(heliusTransferSchema).optional(),
+    tokenTransfers: z.array(heliusTransferSchema).optional(),
+    instructions: z.array(heliusInstructionSchema).optional(),
+    accountData: z.array(heliusAccountDataSchema).optional(),
+}).passthrough();
+
+export const heliusEnhancedPayloadSchema = z.array(heliusEnhancedTxSchema).or(heliusEnhancedTxSchema);
 
 export const swapOrderSchema = z.object({
     inputMint: z.string()
@@ -134,36 +132,4 @@ export const yieldWithdrawSchema = z.object({
     wallet: z.string().regex(solanaAddressRegex, 'Invalid destination wallet address'),
 });
 
-const rawTokenBalanceSchema = z.object({
-    accountIndex: z.number(),
-    mint: z.string(),
-    owner: z.string().optional(),
-    uiTokenAmount: z.object({
-        amount: z.string(),
-        decimals: z.number(),
-        uiAmount: z.number().nullable(),
-        uiAmountString: z.string().optional(),
-    }),
-}).passthrough();
-
-const rawTxSchema = z.object({
-    blockTime: z.number().nullable(),
-    slot: z.number(),
-    meta: z.object({
-        err: z.any().nullable(),
-        fee: z.number(),
-        preBalances: z.array(z.number()),
-        postBalances: z.array(z.number()),
-        preTokenBalances: z.array(rawTokenBalanceSchema).optional(),
-        postTokenBalances: z.array(rawTokenBalanceSchema).optional(),
-    }).passthrough(),
-    transaction: z.object({
-        message: z.object({
-            accountKeys: z.array(z.string()),
-            instructions: z.array(z.any()).optional(),
-        }).passthrough(),
-        signatures: z.array(z.string()),
-    }),
-}).passthrough();
-
-export const heliusWebhookPayloadSchema = z.array(rawTxSchema).or(rawTxSchema);
+export const heliusWebhookPayloadSchema = heliusEnhancedPayloadSchema;

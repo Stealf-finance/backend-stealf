@@ -25,10 +25,6 @@ export class WebhookHeliusController {
                 return res.status(401).json({ success: false, error: 'Unauthorized' });
             }
 
-            // TODO: remove debug log
-            const rawBody = Array.isArray(req.body) ? req.body[0] : req.body;
-            logger.info({ keys: Object.keys(rawBody || {}), type: rawBody?.type, source: rawBody?.source }, 'Webhook raw body keys');
-
             const validatedPayload = heliusWebhookPayloadSchema.parse(req.body);
 
             await TransactionHandler.handleTransaction(validatedPayload);
