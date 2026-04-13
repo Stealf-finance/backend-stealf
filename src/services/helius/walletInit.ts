@@ -121,61 +121,132 @@ export const solanaService = {
             return cached.slice(0, limit);
         }
 
-        try {
-            const heliusApiKey = process.env.HELIUS_API_KEY;
-            if (!heliusApiKey) {
-                throw new Error('HELIUS_API_KEY not found in environment variables');
-            }
-
-            logger.debug({ address }, 'WalletInit: fetching transactions from Helius API');
-            const isDevnet = process.env.SOLANA_RPC_URL?.includes('devnet');
-            const heliusBase = isDevnet
-                ? 'https://api-devnet.helius.xyz'
-                : 'https://api.helius.xyz';
-            const baseUrl = `${heliusBase}/v0/addresses/${address}/transactions/?api-key=${heliusApiKey}`;
-
-            let url = baseUrl;
-            let lastSignature: string | null = null;
-            let allTransactions: any[] = [];
-
-            while (allTransactions.length < 200) {
-                if (lastSignature) {
-                    url = baseUrl + `&before=${lastSignature}`;
-                }
-
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    logger.error({ status: response.status, body: errorText }, 'Helius API error');
-                    break;
-                }
-
-                const transactions = await response.json() as any[];
-
-                if (transactions && transactions.length > 0) {
-                    allTransactions = [...allTransactions, ...transactions];
-                    lastSignature = transactions[transactions.length - 1].signature;
-
-                    if (allTransactions.length >= 200) {
-                        allTransactions = allTransactions.slice(0, 200);
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
+        // Try Helius enhanced API first, retry once, then fallback to RPC
+        const heliusTxs = await this.fetchFromHelius(address);
+        if (heliusTxs !== null) {
             const rawTransactions = await Promise.all(
-                allTransactions.map((tx) => parseEnhancedTransaction(tx, address))
+                heliusTxs.map((tx) => parseEnhancedTransaction(tx, address))
             );
-
             await CacheService.set(cacheKey, rawTransactions, 300);
             return rawTransactions.slice(0, limit);
+        }
 
+        // Fallback: Solana RPC
+        logger.warn({ address }, 'Helius API failed, falling back to RPC');
+        const rpcTxs = await this.fetchFromRpc(address, limit);
+        if (rpcTxs.length > 0) {
+            await CacheService.set(cacheKey, rpcTxs, 300);
+        }
+        return rpcTxs.slice(0, limit);
+    },
+
+    async fetchFromHelius(address: string): Promise<any[] | null> {
+        const heliusApiKey = process.env.HELIUS_API_KEY;
+        if (!heliusApiKey) return null;
+
+        const isDevnet = process.env.SOLANA_RPC_URL?.includes('devnet');
+        const heliusBase = isDevnet
+            ? 'https://api-devnet.helius.xyz'
+            : 'https://api.helius.xyz';
+        const baseUrl = `${heliusBase}/v0/addresses/${address}/transactions/?api-key=${heliusApiKey}`;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                let url = baseUrl;
+                let lastSignature: string | null = null;
+                let allTransactions: any[] = [];
+
+                while (allTransactions.length < 200) {
+                    if (lastSignature) {
+                        url = baseUrl + `&before=${lastSignature}`;
+                    }
+
+                    const response = await fetch(url);
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        logger.error({ status: response.status, body: errorText, attempt }, 'Helius API error');
+                        throw new Error(`Helius ${response.status}`);
+                    }
+
+                    const transactions = await response.json() as any[];
+
+                    if (transactions && transactions.length > 0) {
+                        allTransactions = [...allTransactions, ...transactions];
+                        lastSignature = transactions[transactions.length - 1].signature;
+
+                        if (allTransactions.length >= 200) {
+                            allTransactions = allTransactions.slice(0, 200);
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                return allTransactions;
+            } catch (error) {
+                if (attempt === 0) {
+                    logger.debug('Retrying Helius API...');
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        }
+        return null;
+    },
+
+    async fetchFromRpc(address: string, limit: number): Promise<any[]> {
+        try {
+            const publicKey = new PublicKey(address);
+            const signatures = await getConnection().getSignaturesForAddress(publicKey, { limit });
+
+            const txs = await Promise.all(
+                signatures.map(async (sig) => {
+                    try {
+                        const tx = await getConnection().getParsedTransaction(sig.signature, { maxSupportedTransactionVersion: 0 });
+                        if (!tx) return null;
+
+                        // Build a RawTransaction from parsed RPC data
+                        const accountKeys = tx.transaction.message.accountKeys.map(k => k.pubkey.toString());
+                        const walletIndex = accountKeys.indexOf(address);
+                        let amount = 0;
+                        let type: 'sent' | 'received' | 'unknown' = 'unknown';
+                        let sender = '';
+                        let recipient = '';
+
+                        if (walletIndex >= 0 && tx.meta) {
+                            const delta = (tx.meta.postBalances[walletIndex] || 0) - (tx.meta.preBalances[walletIndex] || 0);
+                            if (delta !== 0) {
+                                amount = Math.abs(delta) / LAMPORTS_PER_SOL;
+                                type = delta > 0 ? 'received' : 'sent';
+                                sender = type === 'sent' ? address : '';
+                                recipient = type === 'received' ? address : '';
+                            }
+                        }
+
+                        return {
+                            signature: sig.signature,
+                            date: sig.blockTime ? new Date(sig.blockTime * 1000) : new Date(),
+                            status: tx.meta?.err ? 'failed' : 'success',
+                            amount,
+                            tokenMint: null,
+                            tokenSymbol: 'SOL',
+                            tokenDecimals: 9,
+                            type,
+                            sender,
+                            recipient,
+                            slot: sig.slot || 0,
+                        };
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+
+            return txs.filter(Boolean) as any[];
         } catch (error) {
-            logger.error({ err: error }, 'Error fetching transactions');
-            throw error;
+            logger.error({ err: error }, 'RPC fallback failed');
+            return [];
         }
     }
 };
