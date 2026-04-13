@@ -13,6 +13,7 @@ interface PreAuthPayload {
 interface PreAuthStatus {
     email: string;
     pseudo: string;
+    inviteCode: string;
     verified: boolean;
     createdAt: Date;
 }
@@ -22,7 +23,7 @@ export class PreAuthService {
     private static readonly TOKEN_EXPIRY = 10 * 60; // 10 minutes in secondes
     private static readonly REDIS_KEY_PREFIX = 'preauth:';
 
-    static async createPreAuthToken(email: string, pseudo: string): Promise<string> {
+    static async createPreAuthToken(email: string, pseudo: string, inviteCode: string): Promise<string> {
         const sessionId = uuidv4();
 
         const payload: PreAuthPayload = {
@@ -38,6 +39,7 @@ export class PreAuthService {
         const statusData: PreAuthStatus = {
             email,
             pseudo,
+            inviteCode,
             verified: false,
             createdAt: new Date()
         };

@@ -57,9 +57,7 @@ export class UserController {
             let responseData: any;
 
             if (unavailable.length === 0 && email && pseudo) {
-                const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo);
-
-                await InviteCode.deleteOne({ code: inviteCode });
+                const preAuthToken = await PreAuthService.createPreAuthToken(email, pseudo, inviteCode!);
 
                 magicLinkService.sendMagicLink(email, pseudo).catch((err) =>
                     logger.error({ err }, 'Failed to send magic link'),
@@ -171,6 +169,14 @@ export class UserController {
             const turnkey_subOrgId = decoded.organizationId;
 
             const user = await createUser(email, pseudo, cash_wallet, turnkey_subOrgId, stealf_wallet);
+
+            // Delete invite code after successful account creation
+            if (preAuthToken) {
+                const preAuthStatus = await PreAuthService.verifyPreAuthToken(preAuthToken);
+                if (preAuthStatus?.inviteCode) {
+                    await InviteCode.deleteOne({ code: preAuthStatus.inviteCode });
+                }
+            }
 
             return res.status(201).json({
                 success: true,

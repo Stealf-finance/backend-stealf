@@ -24,6 +24,10 @@ const envSchema = z.object({
   BACKEND_URL: z.string().default('http://localhost:5000'),
   COINGECKO_URL: z.string().default(''),
 
+  // ── Helius webhooks ───────────────────────────────────────────────
+  HELIUS_WEBHOOK_ID: z.string().min(1, 'HELIUS_WEBHOOK_ID is required'),
+  HELIUS_VAULT_WEBHOOK_ID: z.string().min(1, 'HELIUS_VAULT_WEBHOOK_ID is required'),
+
   // ── Optional (no defaults, used when present) ─────────────────────
   JUPITER_API_KEY: z.string().optional(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),

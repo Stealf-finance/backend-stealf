@@ -1,76 +1,39 @@
-import { createHelius } from 'helius-sdk';
-import { WebhookHelius } from '../../models/WebhookHelius';
-import { User } from '../../models/User';
 import logger from '../../config/logger';
 
 class HeliusWebhookManager {
-    private helius;
-    private isDevnet = process.env.SOLANA_RPC_URL?.includes('devnet') ?? false;
-    private webhookConfigId = `helius-solana-${process.env.SOLANA_RPC_URL?.includes('devnet') ? 'devnet' : 'mainnet'}-${process.env.NODE_ENV === 'production' ? 'prod' : 'dev'}`;
+    private webhookId = process.env.HELIUS_WEBHOOK_ID!;
+    private baseUrl = 'https://api.helius.xyz';
+    private apiHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.HELIUS_API_KEY}`,
+    };
 
-    constructor() {
-        this.helius = createHelius({
-            apiKey: process.env.HELIUS_API_KEY!
-        });
-    }
-
-    async initialize(webhookUrl: string) {
-
+    async initialize() {
         try {
-            const fullWebhookUrl = `${webhookUrl}/api/helius/helius`;
-            let config  = await WebhookHelius.findById(this.webhookConfigId);
+            const response = await fetch(`${this.baseUrl}/v0/webhooks/${this.webhookId}`, {
+                headers: this.apiHeaders,
+            });
 
-            if (config){
-                logger.info({ webhookId: config.webhookId }, 'Webhook config found in DB');
-
-                return config;
+            if (!response.ok) {
+                throw new Error(`Webhook ${this.webhookId} not found on Helius: ${await response.text()}`);
             }
 
-            logger.info('No webhook config found, creating new webhook');
+            const webhookData = await response.json();
+            logger.info({
+                webhookId: this.webhookId,
+                type: webhookData.webhookType,
+                addresses: webhookData.accountAddresses?.length || 0,
+            }, 'Helius webhook verified');
 
-            const users = await User.find();
-            const wallets: string[] = [];
-            users.forEach(user => {
-                if (user.cash_wallet) wallets.push(user.cash_wallet);
-            });
-
-            const webhook = await this.helius.webhooks.create({
-                webhookURL: fullWebhookUrl,
-                transactionTypes: ['ANY'],
-                accountAddresses: wallets,
-                webhookType: 'raw',
-            });
-
-            logger.info({ webhookId: webhook.webhookID }, 'Webhook created');
-
-            config = await WebhookHelius.create({
-                _id: this.webhookConfigId,
-                provider: 'helius',
-                network: this.isDevnet ? 'solana-devnet' : 'solana-mainnet',
-                env: process.env.NODE_ENV === 'production' ? 'production' : 'development',
-                webhookId: webhook.webhookID,
-                url: fullWebhookUrl,
-                accountCount: wallets.length,
-                status: 'active',
-            });
-
-            logger.info('Webhook config saved to MongoDB');
-            return config;
-
-        } catch (error){
-            logger.error({ err: error }, 'Failed to initialize webhook');
+            return webhookData;
+        } catch (error) {
+            logger.error({ err: error }, 'Failed to verify webhook');
             throw error;
         }
     }
 
     async addUserWallets(cash_wallet: string, stealf_wallet?: string) {
         try {
-            const config = await WebhookHelius.findById(this.webhookConfigId);
-
-            if (!config) {
-                throw new Error('Webhook not initialized. Call initialize() first.');
-            }
-
             const walletsToAdd: string[] = [];
             if (cash_wallet) walletsToAdd.push(cash_wallet);
             if (stealf_wallet) walletsToAdd.push(stealf_wallet);
@@ -80,24 +43,16 @@ class HeliusWebhookManager {
                 return;
             }
 
-            const baseUrl = 'https://api.helius.xyz';
-            const getUrl = `${baseUrl}/v0/webhooks/${config.webhookId}`;
-            const apiHeaders = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.HELIUS_API_KEY}`,
-            };
-
-            const getResponse = await fetch(getUrl, { headers: apiHeaders });
+            const getResponse = await fetch(`${this.baseUrl}/v0/webhooks/${this.webhookId}`, {
+                headers: this.apiHeaders,
+            });
             if (!getResponse.ok) {
                 throw new Error(`Failed to fetch webhook: ${await getResponse.text()}`);
             }
 
             const webhookData = await getResponse.json();
-            const existingAddresses = webhookData.accountAddresses || [];
-
+            const existingAddresses: string[] = webhookData.accountAddresses || [];
             const allAddresses = [...new Set([...existingAddresses, ...walletsToAdd])];
-
-            const putUrl = `${baseUrl}/v0/webhooks/${config.webhookId}`;
 
             const updatePayload: any = {
                 webhookURL: webhookData.webhookURL,
@@ -110,9 +65,9 @@ class HeliusWebhookManager {
                 updatePayload.authHeader = webhookData.authHeader;
             }
 
-            const putResponse = await fetch(putUrl, {
+            const putResponse = await fetch(`${this.baseUrl}/v0/webhooks/${this.webhookId}`, {
                 method: 'PUT',
-                headers: apiHeaders,
+                headers: this.apiHeaders,
                 body: JSON.stringify(updatePayload),
             });
 
@@ -121,17 +76,17 @@ class HeliusWebhookManager {
                 throw new Error(`Helius API error (${putResponse.status}): ${errorText}`);
             }
 
-            config.accountCount = allAddresses.length;
-            await config.save();
-
-            logger.info({ walletsAdded: walletsToAdd.length, webhookId: config.webhookId, totalAddresses: allAddresses.length }, 'Wallets added to webhook');
+            logger.info({
+                walletsAdded: walletsToAdd.length,
+                webhookId: this.webhookId,
+                totalAddresses: allAddresses.length,
+            }, 'Wallets added to webhook');
 
         } catch (error) {
             logger.error({ err: error }, 'Failed to add user wallets to webhook');
             throw error;
         }
     }
-
 }
 
 let instance: HeliusWebhookManager | null = null;

@@ -116,9 +116,8 @@ async function start() {
     await mongoose.connect(env.MONGODB_URI);
     logger.info('MongoDB connected');
 
-    const webhookUrl = env.WEBHOOK_URL;
     const heliusWebhookManager = getHeliusWebhookManager();
-    await heliusWebhookManager.initialize(webhookUrl);
+    await heliusWebhookManager.initialize();
     logger.info('Helius webhook initialized');
 
     const socketService = getSocketService();
