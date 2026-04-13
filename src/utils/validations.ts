@@ -132,4 +132,23 @@ export const yieldWithdrawSchema = z.object({
     wallet: z.string().regex(solanaAddressRegex, 'Invalid destination wallet address'),
 });
 
-export const heliusWebhookPayloadSchema = heliusEnhancedPayloadSchema;
+const rawTxSchema = z.object({
+    blockTime: z.number().nullable(),
+    slot: z.number(),
+    meta: z.object({
+        err: z.any().nullable(),
+        fee: z.number(),
+        preBalances: z.array(z.number()),
+        postBalances: z.array(z.number()),
+        preTokenBalances: z.array(z.any()).optional(),
+        postTokenBalances: z.array(z.any()).optional(),
+    }).passthrough(),
+    transaction: z.object({
+        message: z.object({
+            accountKeys: z.array(z.string()),
+        }).passthrough(),
+        signatures: z.array(z.string()),
+    }),
+}).passthrough();
+
+export const heliusWebhookPayloadSchema = z.array(rawTxSchema).or(rawTxSchema);

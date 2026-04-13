@@ -38,7 +38,7 @@ class HeliusWebhookManager {
                 webhookURL: fullWebhookUrl,
                 transactionTypes: ['ANY'],
                 accountAddresses: wallets,
-                webhookType: 'enhanced',
+                webhookType: 'raw',
             });
 
             logger.info({ webhookId: webhook.webhookID }, 'Webhook created');
