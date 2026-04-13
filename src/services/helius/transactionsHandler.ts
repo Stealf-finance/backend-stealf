@@ -200,7 +200,7 @@ export class TransactionHandler {
         transaction: any
     ) {
         try {
-            const historyKey = CacheService.historyKey(walletAddress, 100);
+            const historyKey = CacheService.historyKey(walletAddress, 200);
 
             let currentHistory = await CacheService.get<any[]>(historyKey);
             if (!currentHistory) {
