@@ -103,9 +103,15 @@ export class TransactionHandler {
                     await this.applyDeltas(walletAddress, deltas[walletAddress] || {}, solPrice);
 
                     const parsedTx = await parseRawTransaction(rawTx, walletAddress);
+                    // Skip tx with no value for this wallet (program-only interactions)
+                    if (parsedTx.type === 'unknown' || parsedTx.amount === 0) continue;
+
+                    await this.saveTransactionToHistory(walletAddress, parsedTx);
+
+                    // Emit formatted tx to front for real-time display
                     const [formattedTx] = await parseTransactions([parsedTx], walletAddress);
                     if (formattedTx) {
-                        await this.saveTransactionToHistory(walletAddress, formattedTx);
+                        getSocketService().emitNewTransaction(walletAddress, formattedTx);
                     }
                 }
 
@@ -206,7 +212,7 @@ export class TransactionHandler {
             if (!currentHistory) {
                 const { solanaService } = await import('../helius/walletInit');
                 try {
-                    currentHistory = await solanaService.getTransactions(walletAddress, 100);
+                    currentHistory = await solanaService.getTransactions(walletAddress, 200);
                 } catch {
                     currentHistory = [];
                 }
@@ -221,11 +227,9 @@ export class TransactionHandler {
                 return;
             }
 
-            const newHistory = [transaction, ...currentHistory].slice(0, 100);
+            const newHistory = [transaction, ...currentHistory].slice(0, 200);
 
             await CacheService.set(historyKey, newHistory, 300);
-
-            getSocketService().emitNewTransaction(walletAddress, transaction);
 
             txLogger.debug({ wallet: walletAddress.slice(0, 8), entries: newHistory.length }, 'History updated');
         } catch (error) {
