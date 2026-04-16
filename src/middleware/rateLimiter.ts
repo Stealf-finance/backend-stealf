@@ -109,3 +109,16 @@ export const withdrawLimiter = rateLimit({
         });
     }
 });
+
+export const magicLinkLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 5,
+    skip: skipInDev,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+        res.status(429).json({
+            error: 'Too many magic link requests, please try again later'
+        });
+    }
+});
